@@ -58,7 +58,7 @@ def test_gabarito_vinte_e_cinco_colunas_do_modelo():
     gab = gabarito_modelo()
     assert gab["colunas"] == COLUNAS_MODELO_BASE  # real (arquivo) e fallback alinhados
     assert len(gab["colunas"]) == 25
-    assert gab["colunas"][8] == "Membro da FPEvang\n2023 a 2026\n(Somente para reeleição)"
+    assert gab["colunas"][8] == "Membro da FPEvangê\n2023 a 2026\n(Somente para reeleição)"
 
 
 def test_estrutura_modelo_base_schema():
