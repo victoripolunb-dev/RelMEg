@@ -594,6 +594,7 @@ async def gerar_clipping_rota(
     sem_filtro: bool = Query(False, description="True = desativa o Filtro Inteligente Family Talks (varrredura bruta)"),
     data_inicio: Optional[str] = Query(None, description="Início da janela de apresentação (ISO: 2026-08-31)"),
     data_fim: Optional[str] = Query(None, description="Fim da janela de apresentação (ISO: 2026-09-04)"),
+    incluir_dados: bool = Query(False, description="True = inclui as listas estruturadas de proposições (câmara/senado) na resposta JSON"),
 ):
     """
     Gera o Clipping de Novas Proposições (sob demanda — conforme AGENTS.md).
@@ -634,6 +635,9 @@ async def gerar_clipping_rota(
             "modelo": resultado["modelo"],
             "filtro_family_talks": resultado["filtro"],
         }
+        if incluir_dados:
+            resumo["camara"] = resultado["camara"]
+            resumo["senado"] = resultado["senado"]
         return resumo
 
     from fastapi.responses import FileResponse

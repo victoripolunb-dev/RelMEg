@@ -73,3 +73,18 @@ com requisitos rígidos:
 
 Nenhuma outra rota, cli ou serviço pode invocar `BackgroundTasks` sem nova
 revisão e aprovação explícita deste documento.
+
+## Entregas ao cliente (convenção obrigatória — aprovada em 07/09/2026)
+
+- **Pasta de entregas única**: todo artefato entregue ao cliente (relatórios,
+  clippings, planilhas, extratos) deve ser gravado sob
+  `~/Desktop/RelMeg - Entregas/` (config: `settings.dir_entregas`),
+  em subpasta temática (`Relatórios/`, `Novas proposições/`, `TSE/`, `DOU/`,
+  `Dashboards/`, `Perfil/`). Nunca deixar entregas na raiz do repositório.
+- **Formato padrão Word (.docx)** para relatórios e clippings — gerar com
+  python-docx reutilizando a identidade da casa (fonte Montserrat, texto
+  `333333`, links de destaque em negrito vermelho `ff0000`, como em
+  `backend/exportador_local.py`). Arquivos de apoio (JSON/Excel) podem
+  acompanhar o .docx na mesma subpasta.
+- Validação: o template `MODELO A SER SEGUIDO.docx` não deve ser sobrescrito;
+  sempre clonar/gemar a partir dele quando aplicável (`exportador_local.py`).

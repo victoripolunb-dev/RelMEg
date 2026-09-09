@@ -2,8 +2,9 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -130,10 +131,13 @@ async def _lifespan(app: FastAPI):
     yield
 
 
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
 app = FastAPI(
     title="RelMeg API",
     description="Back-end de monitoramento legislativo e stakeholder intelligence",
     lifespan=_lifespan,
+    dependencies=[Security(_api_key_header)],
 )
 
 # ---------------------------------------------------------------------------
