@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 .env
 venv/
+.venv/
 backend/data/
 
 # Logs gerados pelo loguru (observabilidade local)
