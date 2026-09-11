@@ -41,7 +41,7 @@ do operador (AGENTS.md); não há varredura agendada.
 2. **Relatório Executivo (.pdf)** — Relatório corporativo com KPIs, resumos temáticos e tabelas (ReportLab).
 3. **Planilha TSE (.xlsx)** — Exportação estruturada de candidatos seguindo o "MODELO BASE" (25 colunas), compatível com BI (Looker Studio, Google Sheets).
 4. **Ficha Legislativa / Ficha de Parlamentar (.docx)** — Dossiê individual de proposição ou de parlamentar, gerado do repositório local.
-5. **Dossiê rico TSE (JSON)** — Detalhes máximos por candidato (bens individuais, propostas, redes sociais), persistidos e legíveis sem nova consulta à API.
+5. **Dossiê rico TSE (JSON)** — Detalhes máximos por candidato (perfil, **bens individuais + agregados** — maior/menor bem e distribuição por tipo —, **propostas estruturadas** e **redes sociais com plataforma**), persistidos e legíveis sem nova consulta à API.
 6. **Planilha de Coleta de Perfil (.xlsx)** — gabarito do **"Modelo base de coleta - Parlamentares.xlsx"** (contrato do operador; cópia interna em `backend/templates/MODELO BASE`) pré-preenchido com Casa/Nome/Partido/UF dos parlamentares salvos no hub; campos de contato/perfil em branco para o trabalho de campo. Grava em `~/Desktop/RelMeg - Entregas/Perfil/`.
 
 ### Regra de volume na coleta

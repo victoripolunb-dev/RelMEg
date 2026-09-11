@@ -288,6 +288,269 @@ def _norm_detalhe(c: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+# Blocos opcionais do detalhe rico (o "máximo" por candidato). Sem campos = tudo.
+BLOCOS_DETALHE = ("dados", "bens", "propostas", "redes")
+
+
+def _normalizar_campos_detalhe(campos: Optional[str]) -> Optional[set]:
+    """Normaliza o parâmetro ``campos`` da extração (None = coleta o máximo).
+
+    ``campos=bens,propostas`` restringe o que é persistido/lido por candidato.
+    """
+    if campos is None:
+        return None
+    tokens = {c.strip().lower() for c in str(campos).split(",") if c.strip()}
+    desconhecidos = tokens - set(BLOCOS_DETALHE)
+    if desconhecidos:
+        raise ExtrairTSEError(
+            "Blocos inválidos: " + ", ".join(sorted(desconhecidos))
+            + ". Blocos disponíveis: " + ", ".join(BLOCOS_DETALHE) + "."
+        )
+    return tokens or None
+
+
+def _plataforma_rede(url: Optional[str]) -> Optional[str]:
+    """Identifica a plataforma a partir do domínio da URL da rede social.
+
+    Zero chamadas externas: apenas heurística local sobre o host da URL.
+    """
+    texto = str(url or "").strip().lower()
+    if not texto:
+        return None
+    marcas = (
+        ("instagram", "Instagram"),
+        ("facebok", "Facebook"),
+        ("facebook", "Facebook"),
+        ("fb.com", "Facebook"),
+        ("x.com", "X (Twitter)"),
+        ("twitter", "X (Twitter)"),
+        ("youtube", "YouTube"),
+        ("tiktok", "TikTok"),
+        ("linkedin", "LinkedIn"),
+        ("threads", "Threads"),
+        ("whatsapp", "WhatsApp"),
+        ("telegram", "Telegram"),
+        ("site", "Site próprio"),
+    )
+    for marca, rotulo in marcas:
+        if marca in texto:
+            return rotulo
+    return None
+
+
+def _bens_individuais(c: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Normaliza bens individuais do detalhe (tipo, descrição, valor).
+
+    Campos adicionais do TSE (``codigoTipoBem``/``ordemBem``) são preservados
+    **apenas quando presentes** no payload — sem eles, o item mantém o formato
+    enxuto clássico (compatível com consumidores existentes).
+    """
+    bens = c.get("bens") or []
+    if isinstance(bens, dict):
+        bens = bens.get("bens") or []
+    resultado = []
+    for bem in bens:
+        if not isinstance(bem, dict):
+            continue
+        try:
+            valor = round(float(bem.get("valor") or 0), 2)
+        except (TypeError, ValueError):
+            valor = 0.0
+        item = {
+            "tipo": _texto_or_none(
+                bem.get("descricaoDeTipoDeBem")
+                or bem.get("tipoBem")
+                or bem.get("descricaoTipoBem")
+            ),
+            "descricao": str(
+                bem.get("descricao")
+                or bem.get("descricaoDetalhadaBem")
+                or bem.get("descricaoBem")
+                or ""
+            ).strip() or None,
+            "valor": valor,
+        }
+        if bem.get("codigoTipoBem") is not None:
+            item["codigo_tipo_bem"] = bem.get("codigoTipoBem")
+        ordem = bem.get("ordemBem")
+        if ordem is None:
+            ordem = bem.get("ordem")
+        if ordem is not None:
+            item["ordem"] = ordem
+        resultado.append(item)
+    return resultado
+
+
+def _resumo_patrimonio(bens: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Deriva agregações do patrimônio declarado (sem novas chamadas à API).
+
+    Retorna quantidade de bens, o de maior valor, o de menor valor (ignorando
+    itens zerados) e a distribuição somada por tipo de bem, em ordem decrescente.
+    """
+    quantidade = len(bens)
+    maior = None
+    menor = None
+    for bem in bens:
+        valor = float(bem.get("valor") or 0)
+        if maior is None or valor > float(maior.get("valor") or 0):
+            maior = bem
+        if valor > 0 and (menor is None or valor < float(menor.get("valor") or 0)):
+            menor = bem
+
+    por_tipo: Dict[str, Dict[str, Any]] = {}
+    for bem in bens:
+        tipo = _texto_or_none(bem.get("tipo")) or "Não informado"
+        item = por_tipo.setdefault(tipo, {"tipo": tipo, "quantidade": 0, "soma": 0.0})
+        item["quantidade"] += 1
+        item["soma"] = round(item["soma"] + float(bem.get("valor") or 0), 2)
+
+    return {
+        "quantidade": quantidade,
+        "maiorBem": maior,
+        "menorBem": menor,
+        "distribuicaoPorTipo": sorted(
+            por_tipo.values(), key=lambda x: x["soma"], reverse=True
+        ),
+    }
+
+
+def _norm_propostas(c: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Normaliza propostas/plano de governo em entradas estruturadas.
+
+    Aceita tanto listas de strings quanto de dicionários com chaves variadas
+    do TSE (``proposta``, ``titulo``, ``tema``, ``descricao``, ``resumo``...).
+    As chaves originais são preservadas; ``titulo``/``descricao`` são sempre
+    derivados para consumo uniforme. Entradas vazias são descartadas.
+    """
+    propostas = (
+        c.get("propostas")
+        or c.get("propostaGoverno")
+        or c.get("planoDeGoverno")
+        or []
+    )
+    if isinstance(propostas, dict):
+        propostas = (
+            propostas.get("propostas") or propostas.get("planoDeGoverno") or []
+        )
+    resultado = []
+    for p in propostas:
+        if isinstance(p, dict):
+            entrada = dict(p)
+            titulo = _texto_or_none(
+                entrada.get("titulo") or entrada.get("proposta") or entrada.get("tema")
+            )
+            descricao = _texto_or_none(
+                entrada.get("descricao")
+                or entrada.get("texto")
+                or entrada.get("resumo")
+                or entrada.get("detalhe")
+            )
+            entrada["titulo"] = titulo
+            entrada["descricao"] = descricao
+            if not (titulo or descricao):
+                continue
+        else:
+            if not isinstance(p, str):
+                continue
+            texto = p.strip()
+            if not texto:
+                continue
+            entrada = {"titulo": None, "descricao": texto}
+        resultado.append(entrada)
+    return resultado
+
+
+def _norm_redes(c: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Normaliza redes sociais do detalhe, derivando a plataforma por heurística."""
+    redes = c.get("redesSociais") or c.get("redes") or []
+    if isinstance(redes, dict):
+        redes = redes.get("redesSociais") or redes.get("redes") or []
+    resultado = []
+    for r in redes:
+        if not isinstance(r, dict):
+            continue
+        url = _texto_or_none(
+            r.get("url") or r.get("urlRedeSocial") or r.get("endereco")
+        )
+        resultado.append(
+            {
+                "titulo": _texto_or_none(
+                    r.get("titulo") or r.get("redeSocial") or r.get("nome")
+                ),
+                "url": url,
+                "plataforma": _plataforma_rede(url),
+            }
+        )
+    return resultado
+
+
+def _norm_detalhe_rico(c: Dict[str, Any], campos: Optional[set]) -> Dict[str, Any]:
+    """Monta o payload rico do candidato (o máximo que a página exibe).
+
+    ``campos`` restringe os blocos persistidos; ``None`` = todos.
+    Nenhuma chamada extra é feita aqui: tudo vem do mesmo endpoint de detalhe.
+    O patrimônio ganha agregados derivados (maior/menor bem e distribuição por
+    tipo) e propostas/redes são normalizadas para consumo uniforme.
+    """
+    partido = c.get("partido") or {}
+    coligacao = c.get("coligacao")
+    federacao = c.get("federacao")
+    rico: Dict[str, Any] = {}
+
+    if campos is None or "dados" in campos:
+        rico["dados"] = {
+            "nomeCompleto": _texto_or_none(c.get("nomeCompleto")),
+            "nomeUrna": _texto_or_none(c.get("nomeUrna")),
+            "nomeSocial": _texto_or_none(c.get("nomeSocial")),
+            "cidadeNatal": _texto_or_none(
+                c.get("cidadeNatal") or c.get("cidadeNascimento")
+            ),
+            "ufNascimento": _texto_or_none(
+                c.get("ufNascimento") or c.get("ufNascimentoCandidato")
+            ),
+            "cpf": _texto_or_none(c.get("cpf")),
+            "email": _texto_or_none(c.get("email")),
+            "ocupacao": _texto_or_none(c.get("ocupacao")),
+            "grauInstrucao": _texto_or_none(c.get("grauInstrucao")),
+            "genero": _texto_or_none(c.get("genero") or c.get("descricaoSexo")),
+            "corRaca": _texto_or_none(
+                c.get("corRaca") or c.get("descricaoCorRaca") or c.get("raca")
+            ),
+            "dataNascimento": _texto_or_none(
+                c.get("dataNascimento") or c.get("dataDeNascimento")
+            ),
+            "estadoCivil": _texto_or_none(
+                c.get("estadoCivil") or c.get("descricaoEstadoCivil")
+            ),
+            "situacao": _texto_or_none(
+                c.get("descricaoSituacao") or c.get("situacao")
+            ),
+            "fotoUrl": _texto_or_none(c.get("fotoUrl")),
+        }
+
+    if campos is None or "bens" in campos:
+        bens = _bens_individuais(c)
+        rico["patrimonio"] = {
+            "totalDeBens": _total_bens(c),
+            "resumo": _resumo_patrimonio(bens),
+            "bens": bens,
+        }
+
+    if campos is None or "propostas" in campos:
+        rico["propostas"] = _norm_propostas(c)
+
+    if campos is None or "redes" in campos:
+        rico["redesSociais"] = _norm_redes(c)
+
+    rico["eleicao"] = {
+        "partido": _texto_or_none(partido.get("sigla")),
+        "numero": c.get("numero"),
+        "coligacao": _texto_or_none(coligacao) if isinstance(coligacao, dict) else _texto_or_none(coligacao),
+        "federacao": _texto_or_none(federacao) if isinstance(federacao, dict) else _texto_or_none(federacao),
+    }
+    return rico
+
+
 def _total_bens(c: Dict[str, Any]) -> float:
     """Soma os bens declarados; usa totalDeBens quando presente."""
     total = c.get("totalDeBens")
@@ -313,8 +576,13 @@ async def _enriquecer_candidato(
     id_eleicao: str,
     candidato_bruto: Dict[str, Any],
     cargo_nome: str,
+    campos: Optional[set] = None,
 ) -> Dict[str, Any]:
-    """Busca o detalhe do candidato e mescla com a listagem de forma defensiva."""
+    """Busca o detalhe do candidato e mescla com a listagem de forma defensiva.
+
+    ``campos=None`` coleta o máximo (perfil + bens + propostas + redes sociais,
+    persistidos em ``tse_candidato_detalhe``). Especificou os blocos? Restringe.
+    """
     base = _norm_listagem(candidato_bruto, cargo_nome)
     base["total_bens_declarados"] = None
     base["tem_detalhe"] = False
@@ -362,6 +630,7 @@ async def _enriquecer_candidato(
             ),
             "total_bens_declarados": _total_bens(conteudo),
             "tem_detalhe": True,
+            "_detalhe_rico": _norm_detalhe_rico(conteudo, campos),
         }
     )
     return base
@@ -377,11 +646,15 @@ async def extrair_candidatos(
     codigo_cargo: int,
     municipio: Optional[str] = None,
     limite: Optional[int] = None,
+    campos: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Busca a lista completa de candidatos + detalhe aprofundado de cada um.
 
     Retorna uma lista de dicts já normalizados, pronta para vira um DataFrame.
+    ``campos`` (ex.: "bens,propostas") restringe os blocos do detalhe rico;
+    ``None`` coleta o máximo por candidato.
     """
+    campos_norm = _normalizar_campos_detalhe(campos)
     id_eleicao = _id_eleicao(ano)
     municipais = _eh_municipal(ano)
     uf = _validar_uf(uf)
@@ -411,7 +684,8 @@ async def extrair_candidatos(
         async def _com_semaforo(b: Dict[str, Any]) -> Dict[str, Any]:
             async with semaforo:
                 return await _enriquecer_candidato(
-                    client, ano, unidade, id_eleicao, b, cargo_nome
+                    client, ano, unidade, id_eleicao, b, cargo_nome,
+                    campos=campos_norm,
                 )
 
         return list(await asyncio.gather(*[_com_semaforo(b) for b in brutos]))
@@ -440,6 +714,7 @@ async def obter_candidatos_cacheados(
     limite: Optional[int] = None,
     forcar_atualizacao: bool = False,
     ttl_segundos: Optional[int] = None,
+    campos: Optional[str] = None,
 ) -> tuple[List[Dict[str, Any]], str, str]:
     """Ponto único de entrada da extração com cache obrigatório.
 
@@ -449,11 +724,13 @@ async def obter_candidatos_cacheados(
            o resultado direto do banco → resposta instantânea, zero chamadas à
            API do TSE e nenhum risco de 403 por excesso de requisições.
         3. Caso contrário, executa a varredura na API oficial, salva o bruto no
-           banco local e devolve os dados.
+           banco local (incluindo o detalhe rico por candidato) e devolve os dados.
 
+    ``campos`` restringe os blocos do detalhe rico (None = máximo).
     Retorna a tuple (candidatos, origem, cache_key), em que origem é
     "cache" (servido do banco) ou "api" (recém-extraído e persistido).
     """
+    campos_norm = _normalizar_campos_detalhe(campos)
     _id_eleicao(ano)  # valida o ano suportado antes de prosseguir
     municipais = _eh_municipal(ano)
     uf = _validar_uf(uf)
@@ -475,7 +752,8 @@ async def obter_candidatos_cacheados(
             return dados, "cache", cache_key
 
     candidatos = await extrair_candidatos(
-        ano, uf, codigo_cargo, municipio=municipio, limite=limite
+        ano, uf, codigo_cargo, municipio=municipio, limite=limite,
+        campos=campos_norm if campos_norm else None,
     )
     try:
         await asyncio.to_thread(
@@ -487,7 +765,15 @@ async def obter_candidatos_cacheados(
         # Falha de persistência (filesystem somente-leitura em deploy) nunca
         # deve impedir a entrega dos resultados.
         pass
-    return candidatos, "api", cache_key
+    try:
+        await asyncio.to_thread(database.salvar_detalhe_candidatos, cache_key, candidatos)
+    except Exception:
+        pass
+    limpos = [
+        {k: v for k, v in c.items() if k != "_detalhe_rico"}
+        for c in candidatos
+    ]
+    return limpos, "api", cache_key
 
 
 # ---------------------------------------------------------------------------
@@ -507,6 +793,7 @@ async def processar_extracao_tse_em_segundo_plano(
     municipio: Optional[str] = None,
     limite: Optional[int] = None,
     forcar_atualizacao: bool = False,
+    campos: Optional[str] = None,
 ) -> None:
     """Executa a extração pesada fora da requisição HTTP e registra o status.
 
@@ -521,7 +808,7 @@ async def processar_extracao_tse_em_segundo_plano(
         )
         candidatos, origem, cache_key = await obter_candidatos_cacheados(
             ano, uf, codigo_cargo, municipio=municipio, limite=limite,
-            forcar_atualizacao=forcar_atualizacao,
+            forcar_atualizacao=forcar_atualizacao, campos=campos,
         )
 
         await asyncio.to_thread(
@@ -819,6 +1106,10 @@ async def exportar_candidatos_excel(
     em_segundo_plano: bool = Query(True, description="True = trigger assíncrono (202 Accepted + /tse/execucoes/{id}). False = executa síncrono e retorna o resumo."),
     sincrono: bool = Query(False, description="Compatibilidade: True força o antigo comportamento síncrono (resumo JSON)."),
     download: bool = Query(False, description="True = baixa o .xlsx como arquivo (força execução síncrona)"),
+    campos: Optional[str] = Query(
+        None,
+        description="Blocos do detalhe por candidato (ex.: 'bens,propostas'). Vazio = coleta o MÁXIMO (dados, bens, propostas, redes sociais).",
+    ),
 ):
     """
     Extrai/enriquece candidatos do TSE e exporta para 'RelMeg - Entregas/TSE'.
@@ -829,17 +1120,27 @@ async def exportar_candidatos_excel(
     acompanhamento em `GET /tse/execucoes/{task_id}` (imune a timeouts do
     cliente e a 403/indisponibilidade do TSE quando o cache local tiver dados).
 
+    Regra de volume: sem `campos` o motor coleta O MÁXIMO (perfil, bens
+    individuais, propostas e redes sociais de cada candidato, persistidos em
+    `tse_candidato_detalhe` e legíveis em GET /tse/detalhe/{cache_key}/{id}).
+    Com `campos` (ex.: `campos=bens`) a coleta fica restrita aos blocos pedidos.
+
     Parâmetros de compatibilidade:
     - `em_segundo_plano=false` ou `sincrono=true`: comportamento antigo,
       resposta imediata com o resumo JSON.
     - `download=true`: retorna o .xlsx (força modo síncrono — o stream precisa
       do resultado na resposta).
     """
+    try:
+        campos_norm = _normalizar_campos_detalhe(campos)
+    except ExtrairTSEError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if sincrono or download or not em_segundo_plano:
         return await _executar_extracao_sincrona(
             ano, uf, codigo_cargo,
             municipio=municipio, limite=limite,
             forcar_atualizacao=forcar_atualizacao, download=download,
+            campos=campos_norm if campos_norm else None,
         )
 
 # Trigger assíncrono: valida os parâmetros ANTES de aceitar a tarefa.
@@ -855,8 +1156,13 @@ async def exportar_candidatos_excel(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # AGENTS.md: recusa disparo concorrente para o mesmo escopo (409).
+    # A criação é atômica (check + insert sob BEGIN IMMEDIATE em database.py):
+    # dois disparos simultâneos não conseguem passar juntos (sem janela TOCTOU).
+    task_id = str(uuid.uuid4())
     ativa = await asyncio.to_thread(
-        database.execucao_ativa_tse, ano, uf, codigo_cargo, municipio
+        database.iniciar_execucao_tse,
+        task_id, ano, uf, codigo_cargo,
+        municipio=municipio, limite=limite, forcar_atualizacao=forcar_atualizacao,
     )
     if ativa:
         raise HTTPException(
@@ -868,16 +1174,11 @@ async def exportar_candidatos_excel(
             },
         )
 
-    task_id = str(uuid.uuid4())
-    await asyncio.to_thread(
-        database.criar_execucao_tse,
-        task_id, ano, uf, codigo_cargo,
-        municipio=municipio, limite=limite, forcar_atualizacao=forcar_atualizacao,
-    )
     background_tasks.add_task(
         processar_extracao_tse_em_segundo_plano,
         task_id, ano, uf, codigo_cargo,
         municipio=municipio, limite=limite, forcar_atualizacao=forcar_atualizacao,
+        campos=campos_norm if campos_norm else None,
     )
     return JSONResponse(
         content={
@@ -888,6 +1189,7 @@ async def exportar_candidatos_excel(
                 "ano": ano, "uf": uf, "codigo_cargo": codigo_cargo,
                 "municipio": municipio, "limite": limite,
                 "forcar_atualizacao": forcar_atualizacao,
+                "campos": sorted(campos_norm) if campos_norm else "todos",
             },
         },
         status_code=202,
@@ -902,19 +1204,21 @@ async def _executar_extracao_sincrona(
     limite: Optional[int] = None,
     forcar_atualizacao: bool = False,
     download: bool = False,
+    campos: Optional[str] = None,
 ):
     """Fluxo síncrono legado (resumo JSON ou .xlsx), sempre passando pelo cache."""
     try:
         candidatos, origem, cache_key = await obter_candidatos_cacheados(
             ano, uf, codigo_cargo,
             municipio=municipio, limite=limite, forcar_atualizacao=forcar_atualizacao,
+            campos=campos,
         )
     except ExtrairTSEError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     df = estrutura_dataframe(candidatos, ano, uf)
     nome = nome_arquivo(ano, uf, codigo_cargo)
-    caminho_gravado = gravar_arquivo(df, nome)
+    gravar_arquivo(df, nome)
 
     if download:
         conteudo = _bytes_xlsx(df)
@@ -931,12 +1235,20 @@ async def _executar_extracao_sincrona(
         "total_candidatos": len(df),
         "origem": origem,
         "cache_key": cache_key,
-        "caminho_gravado": caminho_gravado,
         "colunas": list(df.columns),
         "amostra": df.head(5).to_dict(orient="records"),
         "ponte_looker": "Arquivo .xlsx exportado para o diretório 'RelMeg - Entregas/TSE'. "
         "Carregue no Looker Studio como Upload do Google Drive/Sheets.",
     }
+
+
+def _somente_nome(caminho: Any) -> Any:
+    """A3 — expõe apenas o nome do arquivo no JSON (nunca o caminho absoluto)."""
+    from pathlib import Path as _PathLib
+
+    if caminho is None:
+        return None
+    return _PathLib(str(caminho)).name
 
 
 @router.get("/execucoes")
@@ -945,7 +1257,11 @@ async def listar_execucoes(
     limite: int = Query(20, ge=1, le=100, description="Quantidade de execuções recentes"),
 ):
     """Lista as extrações recentes (task_id, filtros, status)."""
-    return {"total": limite, "execucoes": await asyncio.to_thread(database.listar_execucoes_tse, limite)}
+    execucoes = await asyncio.to_thread(database.listar_execucoes_tse, limite)
+    for execucao in execucoes:
+        if "caminho_arquivo" in execucao:
+            execucao["caminho_arquivo"] = _somente_nome(execucao["caminho_arquivo"])
+    return {"total": limite, "execucoes": execucoes}
 
 
 @router.get("/execucoes/{task_id}")
@@ -958,4 +1274,33 @@ async def status_execucao(
     if registro is None:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
     registro["pronto"] = registro.get("status") in ("Concluído", "Falhou")
+    if registro.get("caminho_arquivo"):
+        registro["caminho_arquivo"] = _somente_nome(registro["caminho_arquivo"])
     return registro
+
+
+@router.get("/detalhe/{cache_key}/{id_candidato}")
+async def detalhe_candidato_cacheados(
+    request: Request,
+    cache_key: str = Path(..., min_length=8, description="Chave de cache da extração (campo 'cache_key' da resposta/status)"),
+    id_candidato: str = Path(..., min_length=1, description="ID do candidato no TSE"),
+):
+    """Lê o detalhe RICO (máximo) coletado de um candidato — do cache local, sem rede.
+
+    O payload inclui perfil, patrimônio (bens individuais), propostas e redes
+    sociais, conforme os blocos pedidos na extração (sem `campos` = tudo).
+    """
+    detalhe = await asyncio.to_thread(
+        database.buscar_detalhe_candidato, cache_key, id_candidato
+    )
+    if detalhe is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Detalhe rico ainda não coletado para este candidato. ",
+        )
+    detalhe.pop("capturado_em", None)
+    return {
+        "cache_key": cache_key,
+        "id_candidato": id_candidato,
+        "detalhe": detalhe,
+    }
