@@ -23,6 +23,7 @@ import asyncio
 import datetime as _dt
 import io
 import random
+import re
 import unicodedata as _ud
 import uuid
 from pathlib import Path
@@ -34,7 +35,7 @@ from loguru import logger
 
 import database
 from config import settings
-from modelo_base import bytes_com_gabarito, gabarito_modelo, gravar_com_gabarito
+from servicos.modelo_base import bytes_com_gabarito, gabarito_modelo, gravar_com_gabarito
 
 # ---------------------------------------------------------------------------
 # Configuração centralizada (backend/config.py + env)
@@ -48,6 +49,19 @@ SUBDIR_TSE = settings.subdir_tse
 
 # Janela de validade do cache local (dias/horas via settings / TSE_CACHE_TTL).
 TSE_CACHE_TTL = settings.tse_cache_ttl
+
+# Regra de redação de mensagens de erro (A3): remove caminhos absolutos do
+# filesystem e URLs internas antes de gravar no campo `detalhe`/auditoria,
+# para nunca expor estrutura local de disco ao operador ou em logs.
+_RE_REDIGE_CAMINHO = re.compile(
+    r"(?:[A-Za-z]:[\\/][^\s;,\"']*|~[\\/][^\s;,\"']*|/(?:home|Users|tmp|var|opt)[/\w.-]*)"
+)
+
+
+def _redigir_mensagem(mensagem: str) -> str:
+    """Remove caminhos absolutos de uma mensagem de erro (leak de estrutura)."""
+    texto = str(mensagem)
+    return _RE_REDIGE_CAMINHO.sub("[caminho]", texto)
 
 _HEADERS = {
     "Accept": "application/json",
@@ -584,6 +598,7 @@ async def _enriquecer_candidato(
     persistidos em ``tse_candidato_detalhe``). Especificou os blocos? Restringe.
     """
     base = _norm_listagem(candidato_bruto, cargo_nome)
+    base["ano"] = ano
     base["total_bens_declarados"] = None
     base["tem_detalhe"] = False
 
@@ -843,31 +858,33 @@ async def processar_extracao_tse_em_segundo_plano(
             task_id, ano, uf, codigo_cargo, len(df), origem,
         )
     except ExtrairTSEError as exc:
+        msg = _redigir_mensagem(exc)
         logger.error(
             "Extração TSE FALHOU (task={}ano={} uf={} cargo={}): {}",
-            task_id, ano, uf, codigo_cargo, exc,
+            task_id, ano, uf, codigo_cargo, msg,
         )
         await asyncio.to_thread(
             database.atualizar_execucao_tse, task_id,
-            status="Falhou", etapa="Falhou", detalhe=str(exc),
+            status="Falhou", etapa="Falhou", detalhe=msg,
         )
         await asyncio.to_thread(
             database.registrar_evento, "extracao_falhou",
-            f"TSE {ano}/{uf} (cargo {codigo_cargo}): {exc}",
+            f"TSE {ano}/{uf} (cargo {codigo_cargo}): {msg}",
         )
     except Exception as exc:  # nunca deixe o worker quebrar o processo
+        msg = _redigir_mensagem(exc)
         logger.error(
             "Extração TSE FALHOU (task={} ano={} uf={} cargo={}): {}: {}",
-            task_id, ano, uf, codigo_cargo, type(exc).__name__, exc,
+            task_id, ano, uf, codigo_cargo, type(exc).__name__, msg,
         )
         await asyncio.to_thread(
             database.atualizar_execucao_tse, task_id,
             status="Falhou", etapa="Falhou",
-            detalhe=f"{type(exc).__name__}: {exc}",
+            detalhe=f"{type(exc).__name__}: {msg}",
         )
         await asyncio.to_thread(
             database.registrar_evento, "extracao_falhou",
-            f"TSE {ano}/{uf} (cargo {codigo_cargo}): {type(exc).__name__}: {exc}",
+            f"TSE {ano}/{uf} (cargo {codigo_cargo}): {type(exc).__name__}: {msg}",
         )
 
 
@@ -1097,7 +1114,7 @@ router = APIRouter(prefix="/tse", tags=["TSE / Exportação Excel"])
 async def exportar_candidatos_excel(
     request: Request,
     background_tasks: BackgroundTasks,
-    ano: int = Path(..., ge=2018, le=2030, description="Ano eleitoral (2020, 2022, 2024, 2026...)"),
+    ano: int = Path(..., ge=2018, le=2100, description="Ano eleitoral (2020, 2022, 2024, 2026...)"),
     uf: str = Path(..., min_length=2, max_length=2, description="Sigla da UF (ex: GO)"),
     codigo_cargo: int = Path(..., ge=1, le=13, description="Código do cargo (7 = Deputado Estadual)"),
     municipio: Optional[str] = Query(None, max_length=12, description="Código do município (obrigatório em eleições municipais)"),
@@ -1207,6 +1224,18 @@ async def _executar_extracao_sincrona(
     campos: Optional[str] = None,
 ):
     """Fluxo síncrono legado (resumo JSON ou .xlsx), sempre passando pelo cache."""
+    # Validação de input do operador ANTES de tocar a API (400, não 502).
+    try:
+        _id_eleicao(ano)
+        _validar_uf(uf)
+        _validar_cargo(codigo_cargo, municipais=_eh_municipal(ano))
+        if _eh_municipal(ano) and not municipio:
+            raise ExtrairTSEError(
+                "Nas eleições municipais (2020/2024) informe o código do município."
+            )
+    except ExtrairTSEError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     try:
         candidatos, origem, cache_key = await obter_candidatos_cacheados(
             ano, uf, codigo_cargo,
@@ -1252,6 +1281,7 @@ def _somente_nome(caminho: Any) -> Any:
 
 
 @router.get("/execucoes")
+@limiter.limit(LIMITE_TSE)
 async def listar_execucoes(
     request: Request,
     limite: int = Query(20, ge=1, le=100, description="Quantidade de execuções recentes"),
@@ -1265,6 +1295,7 @@ async def listar_execucoes(
 
 
 @router.get("/execucoes/{task_id}")
+@limiter.limit(LIMITE_TSE)
 async def status_execucao(
     request: Request,
     task_id: str = Path(..., min_length=8, description="ID da execução retornado pelo trigger"),
@@ -1280,6 +1311,7 @@ async def status_execucao(
 
 
 @router.get("/detalhe/{cache_key}/{id_candidato}")
+@limiter.limit(LIMITE_TSE)
 async def detalhe_candidato_cacheados(
     request: Request,
     cache_key: str = Path(..., min_length=8, description="Chave de cache da extração (campo 'cache_key' da resposta/status)"),

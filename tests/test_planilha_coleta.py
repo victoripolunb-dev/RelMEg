@@ -11,7 +11,7 @@ import openpyxl
 import pandas as pd
 
 from config import settings
-from exportador_planilha import (
+from servicos.exportador_planilha import (
     linha_parlamentar,
     dataframe_coleta,
     bytes_planilha_coleta,
@@ -19,7 +19,7 @@ from exportador_planilha import (
     nome_arquivo_coleta,
     NOMES_CASA,
 )
-from modelo_base import (
+from servicos.modelo_base import (
     COLUNAS_MODELO_BASE,
     MODELO_BASE_OPERADOR,
     gabarito_modelo,
@@ -156,6 +156,6 @@ def test_contrato_operador_e_copia_interna_alinhados():
 
 
 def test_contrato_disponivel_ao_menos_uma_fonte():
-    from modelo_base import contrato_disponivel
+    from servicos.modelo_base import contrato_disponivel
 
     assert contrato_disponivel()

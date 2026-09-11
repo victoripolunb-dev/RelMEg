@@ -63,6 +63,15 @@ async def _enriquecer_camara(
     registros = tramitacoes.get("dados") or []
     if isinstance(registros, dict):
         registros = [registros]
+    registros = [
+        r for r in registros
+        if isinstance(r, dict)
+    ]
+    # Garante a ordenação mais recente por último (a API costuma vir ordenada,
+    # mas o contrato não é verificado — aqui normalizamos por data quando houver).
+    registros.sort(
+        key=lambda r: r.get("dataHora") or r.get("data") or r.get("situacao") or "",
+    )
 
     if registros:
         ultimo = registros[-1]
@@ -126,11 +135,11 @@ async def _listar_proposicoes(
 
             proposicoes_formatadas = [
                 {
-                    "id": prop["id"],
-                    "siglaTipo": prop["siglaTipo"],
-                    "numero": prop["numero"],
-                    "ano": prop["ano"],
-                    "ementa": prop["ementa"],
+                    "id": prop.get("id"),
+                    "siglaTipo": prop.get("siglaTipo"),
+                    "numero": prop.get("numero"),
+                    "ano": prop.get("ano"),
+                    "ementa": prop.get("ementa"),
                     "situacao": None,
                     "comissao": None,
                     "relator": None,
@@ -139,11 +148,10 @@ async def _listar_proposicoes(
             ]
 
             if enriquecer and proposicoes_formatadas:
-                alvo = proposicoes_formatadas[:20]
                 riquezas = await asyncio.gather(
-                    *[_enriquecer_camara(client, p) for p in alvo]
+                    *[_enriquecer_camara(client, p) for p in proposicoes_formatadas]
                 )
-                for prop, riqueza in zip(alvo, riquezas):
+                for prop, riqueza in zip(proposicoes_formatadas, riquezas):
                     prop.update(riqueza)
 
             return {

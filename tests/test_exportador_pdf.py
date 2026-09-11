@@ -1,8 +1,8 @@
-"""Testes do Relatório Executivo em PDF (backend/exportador_pdf.py)."""
+"""Testes do Relatório Executivo em PDF (backend/servicos/exportador_pdf.py)."""
 import os
 from pathlib import Path
 
-from exportador_pdf import (
+from servicos.exportador_pdf import (
     bytes_pdf_executivo,
     gerar_pdf_executivo,
     montar_relatorio_de_clipping,

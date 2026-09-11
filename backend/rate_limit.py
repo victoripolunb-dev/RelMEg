@@ -12,7 +12,8 @@ from config import settings
 
 # Alvo: limite genérico (backstop) aplicado pelo middleware a rotas NÃO
 # decoradas. As rotas sensíveis possuem limites próprios mais restritos.
-LIMITES_PADRAO = ["120/minute"]
+# Sobrescrevível via env RATELIMIT_DEFAULT (config.settings.ratelimit_default).
+LIMITES_PADRAO = [settings.ratelimit_default]
 
 # Limites por grupo de rota (ajuste conforme o uso real em produção)
 LIMITE_FACHADA = "10/minute"
@@ -30,7 +31,7 @@ def _chave_remota(request) -> str:
     O ``X-Forwarded-For`` NUNCA é confiado por padrão: um cliente pode forjar o
     cabeçalho e zerar a própria cota (ou um farejador pode mascarar o lote). Só
     passamos a usá-lo quando o deploy roda atrás de proxy controlado e essa
-    premissa é declarada via ``RELMEG_CONFIAR_XFF=true`` (config.settings).
+    premissa é declarada via ``CONFIAR_XFF=true`` (config.settings).
     Sem a flag, usa o endereço real do socket (última camada confiável).
     """
     if settings.confiar_xff:

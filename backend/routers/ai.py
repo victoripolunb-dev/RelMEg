@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from starlette.requests import Request
 from typing import Optional
@@ -30,9 +30,6 @@ async def resumir_dou(request: Request, payload: ResumirDOURequest):
     """
     texto = (payload.texto or "").strip()
     titulo = (payload.titulo or "").strip()
-
-    if not texto:
-        raise HTTPException(status_code=422, detail="O campo 'texto' é obrigatório.")
 
     palavras = len(texto.split())
     resumo = (

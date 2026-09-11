@@ -144,10 +144,10 @@ def extrair_html_seguro(
     """
     fetcher = _carregar_scrapling()
     try:
-        resposta = fetcher.fetch(url, timeout=timeout_ms, headless=headless)
-
         if adaptivo:
             fetcher.configure(adaptive=True)
+
+        resposta = fetcher.fetch(url, timeout=timeout_ms, headless=headless)
 
         status = getattr(resposta, "status", None)
         if status is not None and status >= 400:

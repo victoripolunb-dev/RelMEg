@@ -198,7 +198,7 @@ async def _get_json(url: str) -> dict:
 @limiter.limit(LIMITE_TSE)
 async def listar_municipios(
     request: Request,
-    ano: int = Query(..., description="Ano eleitoral: 2020, 2022 ou 2024", ge=2018, le=2030),
+    ano: int = Query(..., description="Ano eleitoral: 2020, 2022 ou 2024", ge=2018, le=2100),
     uf: str = Query(..., min_length=2, max_length=2, description="Sigla da UF (2 letras)"),
 ):
     """
@@ -237,7 +237,7 @@ async def listar_municipios(
 @limiter.limit(LIMITE_TSE)
 async def listar_candidatos(
     request: Request,
-    ano: int = Query(..., description="Ano eleitoral: 2020, 2022 ou 2024", ge=2018, le=2030),
+    ano: int = Query(..., description="Ano eleitoral: 2020, 2022 ou 2024", ge=2018, le=2100),
     uf: str = Query(..., min_length=2, max_length=2, description="Sigla da UF (2 letras) ou BR apenas para cargos nacionais"),
     codigo_cargo: int = Query(..., ge=1, le=13, description="Código do cargo (1, 3, 5, 6, 7, 11, 12, 13)"),
     municipio: Optional[str] = Query(None, max_length=12, description="Código do município (obrigatório nas eleições municipais, ex: 71072)"),
@@ -306,7 +306,7 @@ async def listar_candidatos(
 @limiter.limit(LIMITE_TSE)
 async def detalhe_candidato(
     request: Request,
-    ano: int = Path(..., ge=2018, le=2030),
+    ano: int = Path(..., ge=2018, le=2100),
     uf: str = Path(..., min_length=2, max_length=2),
     id_candidato: int = Path(..., ge=1),
     municipio: Optional[str] = Query(None, max_length=12, description="Código do município (obrigatório nas eleições municipais, ex: 71072)"),

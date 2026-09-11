@@ -1,6 +1,7 @@
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from loguru import logger
 from starlette.requests import Request
 
 from rate_limit import limiter, LIMITE_DOU
@@ -38,18 +39,24 @@ def pesquisar_dou(
     estável e sob demanda — do qual `/hub/busca/proposicoes?fonte=dou` é a
     versão normalizada no hub.
     """
-    erros_base = {
-        "erro": "Não foi possível recarregar os resultados do DOU deste período.",
-        "url_busca_oficial": _url_busca_oficial(q, secao, data),
-    }
-
     try:
         resultados = [
             {k: v for k, v in hit.items() if k not in ("fonte", "id_externo")}
             for hit in coletar_portal_sr(q, secao=secao, data=data, itens=itens)
         ]
-    except Exception:
-        return erros_base
+    except Exception as exc:  # noqa: BLE001 — falha de integração do portal → 503
+        logger.error(
+            "dou: falha ao coletar o portal SR — {tipo}: {e}",
+            tipo=type(exc).__name__, e=exc,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Não foi possível recarregar os resultados do DOU deste período. "
+                "O portal pode estar instável — tente novamente em instantes ou "
+                "use a busca oficial."
+            ),
+        ) from exc
 
     if not resultados:
         return {

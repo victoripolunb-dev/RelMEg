@@ -30,14 +30,7 @@ from relmeg_core.connectors import (
     SenadoConnector,
 )
 from relmeg_core.models.schemas import ParlamentarModel, ProjetoDeLeiModel, TramitacaoModel
-
-
-def _modulo_database():
-    """Import tardio de ``database`` (módulo-irmão do app, fora do pacote)."""
-    import database  # noqa: PLC0415  (import local para isolar dependência)
-
-    return database
-
+from relmeg_core.utils.helpers import modulo_database
 
 # Fonte canônica → classe conectora. Adicionar novas fontes = registrar aqui.
 REGISTRO_CONECTORES: Dict[str, type] = {
@@ -104,7 +97,7 @@ class OrquestradorLegislativo:
             logger.warning("orquestrador: fonte {f} sem API (- {detalhe})", f=fonte, detalhe="ALGO")
             raise
         if persisitir:
-            _modulo_database().salvar_parlamentar(parlamentar)
+            modulo_database().salvar_parlamentar(parlamentar)
             self._auditar(f"parlamentar {fonte}/{parlamentar.id_externo} salvo")
         return parlamentar
 
@@ -120,7 +113,7 @@ class OrquestradorLegislativo:
         conn = self.conector(fonte)
         projeto = await conn.obter_projeto(id_externo, campos=campos)
         if persisitir:
-            _modulo_database().salvar_projeto(projeto)
+            modulo_database().salvar_projeto(projeto)
             self._auditar(f"projeto {fonte}/{projeto.id_externo} salvo")
         return projeto
 
@@ -136,7 +129,7 @@ class OrquestradorLegislativo:
         conn = self.conector(fonte)
         tramitacoes = await conn.obter_tramitacoes(id_externo, campos=campos)
         if persisitir:
-            _modulo_database().salvar_tramitacoes(fonte, str(id_externo), tramitacoes)
+            modulo_database().salvar_tramitacoes(fonte, str(id_externo), tramitacoes)
             self._auditar(f"tramitações {fonte}/{id_externo}: {len(tramitacoes)} eventos")
         return tramitacoes
 
@@ -160,8 +153,8 @@ class OrquestradorLegislativo:
         except FonteSemApiPublica:
             tramitacoes = []
 
-        _modulo_database().salvar_projeto(projeto)
-        _modulo_database().salvar_tramitacoes(fonte, projeto.id_externo, tramitacoes)
+        modulo_database().salvar_projeto(projeto)
+        modulo_database().salvar_tramitacoes(fonte, projeto.id_externo, tramitacoes)
         self._auditar(
             f"coleta completa {fonte}/{projeto.id_externo}: "
             f"{len(tramitacoes)} tramitações"
@@ -202,7 +195,7 @@ class OrquestradorLegislativo:
     def _auditar(detalhe: str) -> None:
         """Registra o evento na auditoria sem nunca quebrar o fluxo."""
         try:
-            _modulo_database().registrar_evento("relmeg_core", detalhe)
+            modulo_database().registrar_evento("relmeg_core", detalhe)
         except Exception as exc:  # noqa: BLE001
             logger.debug("orquestrador: auditoria indisponível: {e}", e=exc)
 

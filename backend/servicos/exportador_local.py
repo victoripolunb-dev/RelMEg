@@ -40,7 +40,7 @@ from routers.proposicoes import _listar_proposicoes
 from routers.senado.materias import _listar_materias_senado
 from config import settings
 import database
-import family_talks
+from servicos import family_talks
 
 # ---------------------------------------------------------------------------
 # Configuração centralizada (backend/config.py + env)
@@ -95,9 +95,8 @@ def _caminho_modelo() -> Path:
     caminho = settings.modelo_clipping
     if not caminho.exists():
         raise ClippingError(
-            f"Modelo não encontrado em: {caminho}. Confirme que "
-            "'MODELO A SER SEGUIDO.docx' está na pasta backend/templates/ "
-            "do repositório."
+            "Modelo 'MODELO A SER SEGUIDO.docx' não encontrado. Confirme que ele "
+            "está na pasta backend/templates/ do repositório e tente novamente."
         )
     return caminho
 
@@ -167,7 +166,12 @@ async def _enriquecer_camara_autor_data(
 
 
 async def _buscar_camara(keywords: List[str]) -> List[Dict[str, Any]]:
-    """Busca proposições na Câmara por palavras-chave e enriquece autor/data."""
+    """Busca proposições na Câmara por palavras-chave e enriquece autor/data.
+
+    Primeiro cruza TODAS as keywords e deduplica por id; só então enriquece
+    cada resultado único (evita chamadas repetidas à API quando a mesma
+    proposição aparece em mais de uma keyword).
+    """
     resultados: Dict[int, Dict[str, Any]] = {}
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), follow_redirects=True) as client:
@@ -180,15 +184,14 @@ async def _buscar_camara(keywords: List[str]) -> List[Dict[str, Any]]:
             except Exception:
                 continue
             for prop in dados.get("proposicoes") or []:
-                prop.update(await _enriquecer_camara_autor_data(client, prop))
                 pid = prop.get("id")
                 if pid is not None:
                     resultados.setdefault(pid, prop)
 
-        # A lista da Câmara vem sem autor/data; erro individual não descarta o item.
+        # A lista da Câmara vem sem autor/data; enriquece cada proposição única
+        # exatamente uma vez — erro individual não descarta o item.
         for prop in resultados.values():
-            if not prop.get("autor"):
-                prop.update(await _enriquecer_camara_autor_data(client, prop))
+            prop.update(await _enriquecer_camara_autor_data(client, prop))
 
     lista = list(resultados.values())
     lista.sort(key=lambda p: str(p.get("numero") or ""))
@@ -562,7 +565,7 @@ async def _gerar_clipping_async(
         "total_camara": len(camara),
         "total_senado": len(senado),
         "total": len(camara) + len(senado),
-        "modelo": str(caminho_modelo),
+        "modelo": os.path.basename(str(caminho_modelo)),
         "camara": camara,
         "senado": senado,
         "filtro": filtro,
@@ -593,7 +596,7 @@ def gerar_clipping(
 from fastapi import APIRouter, HTTPException, Query
 from starlette.requests import Request
 
-from rate_limit import limiter, LIMITE_DOU  # limite conservador por requisição pesada
+from rate_limit import limiter  # limite conservador por requisição pesada
 
 router = APIRouter(prefix="/api/exportar", tags=["Exportação — Clipping Semanal"])
 

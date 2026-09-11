@@ -5,7 +5,7 @@ Sem rede: apenas normalização/agregação local sobre mock do detalhe.
 Cobre bens individuais + resumo derivado, propostas estruturadas, redes com
 plataforma e a ampliação do bloco de dados — preservando compatibilidade.
 """
-from extrator_tse import (
+from servicos.extrator_tse import (
     _bens_individuais,
     _norm_detalhe_rico,
     _norm_propostas,

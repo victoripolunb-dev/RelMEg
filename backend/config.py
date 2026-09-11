@@ -7,7 +7,7 @@ hardcodar caminhos ou configurações: tudo passa por ``settings``.
 
 Carregamento:
     - Valores padrão tipados definidos abaixo;
-    - Sobrescritos por variáveis de ambiente (ex.: RELMEG_DIR_ENTREGAS,
+    - Sobrescritos por variáveis de ambiente (ex.: DIR_ENTREGAS,
       TSE_BASE_URL, TSE_CACHE_TTL) e pelo arquivo backend/.env, se existir.
 
 Validação inicial:
@@ -90,6 +90,10 @@ class Configuracoes(BaseSettings):
     # Quando RELMEG_REQUER_API_KEY=true e a chave estiver vazia, o startup
     # ABORTA (fail-fast) em vez de subir a API exposta sem autenticação.
     relmeg_requer_api_key: bool = False
+    # Define se /docs, /redoc, /openapi.json ficam ABERTOS (públicos) mesmo com
+    # a API key ativa. Padrão False = documentação protegida junto com as rotas.
+    # Em ambiente localhost de desenvolvimento, abra com RELMEG_DOCS_PUBLICOS=true.
+    relmeg_docs_publicos: bool = False
 
     # ------------------------------------------------------------------
     # Rate limit — confiança no cabeçalho X-Forwarded-For
@@ -98,6 +102,9 @@ class Configuracoes(BaseSettings):
     # forjado. True: confia no 1º endereço de X-Forwarded-For — use APENAS se o
     # deploy roda atrás de reverse-proxy controlado (Vercel, Render, nginx).
     confiar_xff: bool = False
+    # Limite genérico (backstop) do slowapi aplicado às rotas NÃO decoradas
+    # (ex.: "120/minute"). Sobrescrevível via env RATELIMIT_DEFAULT.
+    ratelimit_default: str = "120/minute"
 
     # ------------------------------------------------------------------
     # TSE (DivulgaCandContas) — parâmetros operacionais

@@ -30,14 +30,12 @@ import pandas as pd
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from config import RAIZ_REPO, settings
-
-MODELO_NOME = "MODELO BASE"
+from config import settings
 
 # CONTRATO canônico: o arquivo criado pelo operador. Prioridade sobre a cópia
 # interna (config.modelo_base_template) porque é a versão validada por ele.
 NOME_ARQUIVO_CONTRATO = "Modelo base de coleta - Parlamentares.xlsx"
-MODELO_BASE_OPERADOR = RAIZ_REPO / "modelo base" / NOME_ARQUIVO_CONTRATO
+MODELO_BASE_OPERADOR = settings.repo_root / "modelo base" / NOME_ARQUIVO_CONTRATO
 
 # ---------------------------------------------------------------------------
 # Fallback (usado apenas se o arquivo não estiver acessível)
@@ -87,14 +85,14 @@ def contrato_modelo() -> Path:
 
     Prioridade:
         1. ``modelo base/Modelo base de coleta - Parlamentares.xlsx`` (original);
-        2. ``backend/templates/MODELO BASE`` (cópia interna versionada);
-        3. pasta legada das entregas TSE (backward compat).
+        2. ``backend/templates/MODELO BASE`` (cópia interna versionada).
+
+    Se nenhum existir, devolve a cópia interna (o chamador trata a ausência
+    com ``contrato_disponivel()`` — o gabarito canônico é o fallback final).
     """
     if MODELO_BASE_OPERADOR.exists():
         return MODELO_BASE_OPERADOR
-    if settings.modelo_base_template.exists():
-        return settings.modelo_base_template
-    return settings.dir_tse / MODELO_NOME
+    return settings.modelo_base_template
 
 
 def contrato_disponivel() -> bool:
