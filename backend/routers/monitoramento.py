@@ -26,7 +26,7 @@ def monitorar_camara(
         "ordenarPor": "id"
     }
     
-    resposta = requests.get(url, params=params)
+    resposta = requests.get(url, params=params, timeout=(5, 30))
     
     if resposta.status_code == 200:
         dados = resposta.json()
@@ -65,7 +65,7 @@ def monitorar_senado(
     if ano:
         params["ano"] = ano
         
-    resposta = requests.get(url, params=params, headers=headers)
+    resposta = requests.get(url, params=params, headers=headers, timeout=(5, 30))
     
     if resposta.status_code == 200:
         dados = resposta.json()

@@ -9,7 +9,7 @@ def listar_comissoes_senado():
     url = "https://legis.senado.leg.br/dadosabertos/comissoes"
     headers = {"Accept": "application/json"}
     
-    resposta = requests.get(url, headers=headers)
+    resposta = requests.get(url, headers=headers, timeout=(5, 30))
     
     if resposta.status_code == 200:
         dados = resposta.json()

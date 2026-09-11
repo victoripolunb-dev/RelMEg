@@ -8,7 +8,7 @@ def listar_autores_proposicao(id: int):
     """Busca os autores de uma proposição específica pelo ID."""
     url = f"https://dadosabertos.camara.leg.br/api/v2/proposicoes/{id}/autores"
     
-    resposta = requests.get(url)
+    resposta = requests.get(url, timeout=(5, 30))
     
     if resposta.status_code == 200:
         dados = resposta.json()

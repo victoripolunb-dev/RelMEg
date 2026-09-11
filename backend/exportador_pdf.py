@@ -139,7 +139,7 @@ def _slug(texto: Any) -> str:
 
 def _nome_pdf(relatorio: Dict[str, Any]) -> str:
     data = str(relatorio.get("periodo") or datetime.now().date().isoformat()).replace("/", "-")
-    return f"Relatorio_Executivo_{_slug(relatorio.get('cliente'))}_{data}.pdf"
+    return f"Relatorio_Executivo_{_slug(relatorio.get('cliente'))}_{_slug(data)}.pdf"
 
 
 # ---------------------------------------------------------------------------
@@ -573,7 +573,6 @@ async def exportar_pdf_executivo(
 
     return {
         "arquivo": salvo["arquivo"],
-        "caminho": salvo["caminho"],
         "cliente": relatorio.get("cliente"),
         "periodo": relatorio.get("periodo"),
         "kpis": relatorio.get("kpis"),

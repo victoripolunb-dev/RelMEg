@@ -8,6 +8,8 @@ atrás de proxy/reverse proxy) e cai para o endereço do socket caso contrário.
 """
 from slowapi import Limiter
 
+from config import settings
+
 # Alvo: limite genérico (backstop) aplicado pelo middleware a rotas NÃO
 # decoradas. As rotas sensíveis possuem limites próprios mais restritos.
 LIMITES_PADRAO = ["120/minute"]
@@ -23,17 +25,20 @@ LIMITE_UPLOAD = "10/minute"
 
 
 def _chave_remota(request) -> str:
-    """Extrai o IP efetivo do cliente, preferindo o 1º endereço de X-Forwarded-For.
+    """Extrai o IP efetivo do cliente para o rate limit.
 
-    O ``X-Forwarded-For`` é confiável apenas quando o app roda atrás de um
-    proxy/reverse-proxy controlado (Render, Vercel, nginx). Isso evita que o
-    IP interno do proxy colapse todos os clientes em uma única cota.
+    O ``X-Forwarded-For`` NUNCA é confiado por padrão: um cliente pode forjar o
+    cabeçalho e zerar a própria cota (ou um farejador pode mascarar o lote). Só
+    passamos a usá-lo quando o deploy roda atrás de proxy controlado e essa
+    premissa é declarada via ``RELMEG_CONFIAR_XFF=true`` (config.settings).
+    Sem a flag, usa o endereço real do socket (última camada confiável).
     """
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        primeiro = forwarded.split(",")[0].strip()
-        if primeiro:
-            return primeiro
+    if settings.confiar_xff:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            primeiro = forwarded.split(",")[0].strip()
+            if primeiro:
+                return primeiro
     if request.client:
         return request.client.host or "indefinido"
     return "indefinido"
