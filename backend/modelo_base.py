@@ -2,17 +2,22 @@
 Modelo Base Dinâmico — gabarito estrutural das extrações do TSE.
 
 Carrega programaticamente a estrutura, a ordem exata das colunas, as larguras
-e os estilos de cabeçalho de "RelMeg - Entregas/TSE/MODELO BASE" (arquivo de
-referência criado pelo operador). Todas as saídas geradas pelas rotas TSE
-seguem este gabarito com fidelidade visual.
+e os estilos de cabeçalho do arquivo CONTRATO de coleta — o
+"Modelo base de coleta - Parlamentares.xlsx" criado pelo operador
+(este repositório mantém a cópia interna em backend/templates/MODELO BASE).
+Todas as saídas geradas pelas rotas do RelMeg seguem este gabarito com
+fidelidade visual.
+
+O CONTRATO (fonte de verdade) é o arquivo do operador; a cópia interna cobre
+clones/deploy sem a pasta externa. Original nunca é sobrescrito.
 
 Garantias:
     - O arquivo-fonte é apenas LEITURA (nunca é sobrescrito).
-    - Ordem das colunas é a do modelo, com os cabeçalhos multi-linha (FPE, FCS,
-      FPBio, FPEvang) e os estilos replicados na saída.
-    - Se o arquivo for indisponível em deploy (pasta fora do repositório),
-      cai num gabarito de fallback com as mesmas 25 colunas na mesma ordem —
-      a extração nunca quebra por falta do modelo.
+    - Ordem das colunas é a do contrato, com os cabeçalhos multi-linha (FPE,
+      FCS, FPBio, FPEvang) e os estilos replicados na saída.
+    - Se ambos os arquivos forem indisponíveis em deploy, cai num gabarito de
+      fallback com as mesmas 25 colunas na mesma ordem — a extração nunca
+      quebra por falta do modelo.
 """
 from __future__ import annotations
 
@@ -25,9 +30,14 @@ import pandas as pd
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from config import settings
+from config import RAIZ_REPO, settings
 
 MODELO_NOME = "MODELO BASE"
+
+# CONTRATO canônico: o arquivo criado pelo operador. Prioridade sobre a cópia
+# interna (config.modelo_base_template) porque é a versão validada por ele.
+NOME_ARQUIVO_CONTRATO = "Modelo base de coleta - Parlamentares.xlsx"
+MODELO_BASE_OPERADOR = RAIZ_REPO / "modelo base" / NOME_ARQUIVO_CONTRATO
 
 # ---------------------------------------------------------------------------
 # Fallback (usado apenas se o arquivo não estiver acessível)
@@ -72,16 +82,32 @@ _LARGURAS_FALLBACK = {
 }
 
 
-def _caminho_modelo() -> Path:
-    """Caminho do arquivo MODELO BASE (template interno do repositório).
+def contrato_modelo() -> Path:
+    """Caminho do CONTRATO de coleta (arquivo do operador → cópia interna).
 
-    Preferência: backend/templates/MODELO BASE (portátil, referência relativa).
-    Se ausente, cai para a pasta legada das entregas TSE (backward compat).
+    Prioridade:
+        1. ``modelo base/Modelo base de coleta - Parlamentares.xlsx`` (original);
+        2. ``backend/templates/MODELO BASE`` (cópia interna versionada);
+        3. pasta legada das entregas TSE (backward compat).
     """
-    preferido = settings.modelo_base_template
-    if preferido.exists():
-        return preferido
+    if MODELO_BASE_OPERADOR.exists():
+        return MODELO_BASE_OPERADOR
+    if settings.modelo_base_template.exists():
+        return settings.modelo_base_template
     return settings.dir_tse / MODELO_NOME
+
+
+def contrato_disponivel() -> bool:
+    """True se o CONTRATO (operador ou cópia interna) estiver acessível."""
+    try:
+        return contrato_modelo().exists()
+    except OSError:
+        return False
+
+
+def _caminho_modelo() -> Path:
+    """Atalho interno (mantém única fonte: o contrato canônico)."""
+    return contrato_modelo()
 
 
 def _cadeia_rgb(cor: Any) -> Optional[str]:
