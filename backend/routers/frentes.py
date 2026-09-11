@@ -5,13 +5,13 @@ router = APIRouter(prefix="/frentes", tags=["Frentes Parlamentares"])
 
 @router.get("/")
 def listar_frentes(
-    itens: int = Query(10, description="Quantidade máxima de frentes retornadas")
+    itens: int = Query(10, ge=1, le=100, description="Quantidade máxima de frentes retornadas")
 ):
     """Busca as frentes parlamentares ativas na Câmara dos Deputados."""
     url = "https://dadosabertos.camara.leg.br/api/v2/frentes"
     
     params = {"itens": itens}
-    resposta = requests.get(url, params=params)
+    resposta = requests.get(url, params=params, timeout=(5, 30))
     
     if resposta.status_code == 200:
         dados = resposta.json()
@@ -36,7 +36,7 @@ def listar_membros_frente(id: int):
     """Busca os deputados membros de uma frente parlamentar específica pelo ID."""
     url = f"https://dadosabertos.camara.leg.br/api/v2/frentes/{id}/membros"
     
-    resposta = requests.get(url)
+    resposta = requests.get(url, timeout=(5, 30))
     
     if resposta.status_code == 200:
         dados = resposta.json()

@@ -1,4 +1,5 @@
 """Testes do Relatório Executivo em PDF (backend/exportador_pdf.py)."""
+import os
 from pathlib import Path
 
 from exportador_pdf import (
@@ -93,7 +94,9 @@ def test_rota_pdf_executivo_payload():
     assert resposta.status_code == 200
     corpo = resposta.json()
     assert corpo["arquivo"].endswith(".pdf")
-    assert Path(corpo["caminho"]).exists()
+    assert "caminho" not in corpo
+    pasta = Path(os.environ["DIR_ENTREGAS"]) / "Relatórios"
+    assert (pasta / corpo["arquivo"]).exists()
 
 
 def test_rota_pdf_executivo_baixar_stream():

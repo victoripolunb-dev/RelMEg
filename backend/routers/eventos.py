@@ -8,7 +8,7 @@ router = APIRouter(prefix="/eventos", tags=["Eventos e Audiências"])
 def listar_eventos(
     dataInicio: Optional[str] = Query(None, description="Data inicial no formato AAAA-MM-DD"),
     dataFim: Optional[str] = Query(None, description="Data final no formato AAAA-MM-DD"),
-    itens: int = Query(10, description="Quantidade máxima de eventos")
+    itens: int = Query(10, ge=1, le=100, description="Quantidade máxima de eventos")
 ):
     """Busca agenda de reuniões, audiências públicas e eventos na Câmara."""
     url = "https://dadosabertos.camara.leg.br/api/v2/eventos"
@@ -24,7 +24,7 @@ def listar_eventos(
     if dataFim:
         params["dataFim"] = dataFim
 
-    resposta = requests.get(url, params=params)
+    resposta = requests.get(url, params=params, timeout=(5, 30))
 
     if resposta.status_code == 200:
         dados = resposta.json()

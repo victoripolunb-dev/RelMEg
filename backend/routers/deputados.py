@@ -8,7 +8,7 @@ def listar_deputados(itens: int = 3):
     """Busca os primeiros parlamentares na API oficial da Câmara dos Deputados."""
     url = f"https://dadosabertos.camara.leg.br/api/v2/deputados?itens={itens}"
 
-    resposta = requests.get(url)
+    resposta = requests.get(url, timeout=(5, 30))
 
     if resposta.status_code == 200:
         dados = resposta.json()

@@ -1,6 +1,7 @@
 import base64
 import csv
 import io
+import zipfile
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -17,10 +18,23 @@ EXTENSOES_PERMITIDAS = {"csv", "xlsx", "pdf"}
 LIMITE_TAMANHO_BYTES = 10 * 1024 * 1024  # 10 MB
 LIMITE_LINHAS_CSV = 100_000
 LIMITE_LINHAS_EXPORTACAO = 100_000
+LIMITE_TAMANHO_DESCOMPRIMIDO_XLSX = 512 * 1024 * 1024  # 512 MB descomprimido (anti zip-bomb)
 
 
 def _extensao_de(nome_arquivo: str) -> str:
     return (nome_arquivo or "").rsplit(".", 1)[-1].lower() if "." in (nome_arquivo or "") else ""
+
+
+def _neutralizar_formula(valor: str) -> str:
+    """Impede formula injection ao exportar CSV para Excel/Looker.
+
+    Células cujo texto inicia com = + - @ passariam a ser interpretadas como
+    fórmulas pelo Excel/Sheets ao abrir/pastar o arquivo. Prefixa uma aspa
+    simples neutra, preservando o conteúdo exibido.
+    """
+    if len(valor) > 1 and valor.startswith(("=", "+", "-", "@")):
+        return "'" + valor
+    return valor
 
 
 async def _ler_com_limite(file: UploadFile, limite: int) -> bytes:
@@ -41,13 +55,34 @@ async def _ler_com_limite(file: UploadFile, limite: int) -> bytes:
 def _ler_xlsx(conteudo: bytes) -> List[Dict[str, Any]]:
     try:
         import openpyxl
+        from openpyxl.utils.exceptions import InvalidFileException
     except ImportError as exc:
         raise HTTPException(
             status_code=501,
             detail="O processamento de .xlsx no backend exige a dependência 'openpyxl'. Instale com 'pip install openpyxl'.",
         ) from exc
 
-    workbook = openpyxl.load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
+    try:
+        with zipfile.ZipFile(io.BytesIO(conteudo)) as zf:
+            total_descomprimido = sum(i.file_size for i in zf.infolist())
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Arquivo .xlsx inválido: não é um ZIP válido.",
+        ) from exc
+    if total_descomprimido > LIMITE_TAMANHO_DESCOMPRIMIDO_XLSX:
+        raise HTTPException(
+            status_code=413,
+            detail="Planilha .xlsx descomprime além do limite suportado pelo backend.",
+        )
+
+    try:
+        workbook = openpyxl.load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
+    except (zipfile.BadZipFile, InvalidFileException) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Arquivo .xlsx corrompido ou em formato inválido.",
+        ) from exc
     planilha = workbook.active
     linhas = planilha.iter_rows(values_only=True)
     cabecalho = None
@@ -162,7 +197,7 @@ async def exportar_sheets(request: Request, payload: Dict[str, Any]):
     escritor.writerow(colunas)
     for registro in registros:
         if isinstance(registro, dict):
-            escritor.writerow([str(registro.get(c, "") or "") for c in colunas])
+            escritor.writerow([_neutralizar_formula(str(registro.get(c, "") or "")) for c in colunas])
 
     total_caracteres = len(saida.getvalue())
     if total_caracteres > 5_000_000:

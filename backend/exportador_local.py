@@ -77,6 +77,20 @@ def _pasta_entregas() -> Path:
     return pasta
 
 
+def _rotulo_arquivo_seguro(rotulo: Optional[str]) -> str:
+    """Sanitiza o rótulo usado no nome do arquivo (impede path traversal).
+
+    Mantém apenas letras/dígitos/espaços/_-. e remove `.`/`..` nas bordas; se
+    sobrar vazio (ou apontar para fora), levanta ClippingError em vez de gravar
+    fora da pasta de entregas (AGENTS.md: entregas sempre em dir_entregas).
+    """
+    bruto = (rotulo or _dt.date.today().isoformat()).strip()
+    limpo = re.sub(r"[^0-9A-Za-zÀ-ú ._-]", "-", bruto).strip(" .")
+    if not limpo or limpo in {".", ".."}:
+        raise ClippingError("Período inválido para o nome do arquivo do Clipping.")
+    return limpo
+
+
 def _caminho_modelo() -> Path:
     caminho = settings.modelo_clipping
     if not caminho.exists():
@@ -520,7 +534,7 @@ async def _gerar_clipping_async(
     _substituir_corpo(doc, camara, senado)
 
     # 4) Salvamento (nunca sobrescreve o modelo).
-    rotulo = (periodo or _dt.date.today().isoformat()).replace("/", "-")
+    rotulo = _rotulo_arquivo_seguro(periodo)
     nome = f"Clipping_Novas_Proposicoes_{rotulo}.docx"
     destino = _pasta_entregas() / nome
     doc.save(str(destino))
@@ -626,7 +640,6 @@ async def gerar_clipping_rota(
     if not baixar:
         resumo = {
             "arquivo": resultado["arquivo"],
-            "caminho": resultado["caminho"],
             "periodo": resultado["periodo"],
             "palavras_chave": resultado["palavras_chave"],
             "total_camara": resultado["total_camara"],
