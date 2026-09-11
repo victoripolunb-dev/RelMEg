@@ -28,3 +28,6 @@ os.environ["RELMEG_CORS_ORIGINS_EXTRA"] = ""
 # Desliga a autenticação X-API-Key na suíte (não enviamos header nos testes).
 # O template do Clipping fica no default backend/templates (já versionado).
 os.environ["RELMEG_API_KEY"] = ""
+# Desliga o fallback Scrapling na suíte: nenhum teste deve abrir browser ou
+# tocar a rede dos portais. Os testes específicos do fallback ligam por teste.
+os.environ["USA_SCRAPLING"] = "false"

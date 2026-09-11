@@ -1,0 +1,9 @@
+# Dependências OPCIONAIS do RelMeg — caminho de fallback (raspagem).
+#
+# Ao contrário de requirements.txt, estes pacotes NÃO são obrigatórios para o
+# motor funcionar: só são importados de forma Lazy quando uma API oficial falha
+# e o conector precisa raspar o HTML (relmeg_core/utils/scrapling_engine.py).
+#
+# Instalação (quando quiser ativar o fallback):
+#   pip install -r requirements-extras.txt
+scrapling==0.4.15
