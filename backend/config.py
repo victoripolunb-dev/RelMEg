@@ -50,6 +50,7 @@ class Configuracoes(BaseSettings):
     subdir_tse: str = "TSE"
     subdir_novas_proposicoes: str = "Novas proposições"
     subdir_relatorios: str = "Relatórios"
+    subdir_perfil: str = "Perfil"
 
     # ------------------------------------------------------------------
     # Cache local e logs
@@ -58,8 +59,14 @@ class Configuracoes(BaseSettings):
     log_dir: Path = DIR_BACKEND / "logs"
     relmeg_cache_db: Path = DIR_BACKEND / "data" / "relmeg_cache.db"
     # Nível de log da observabilidade (loguru). Sobrescrevível via env
-    # RELMEG_LOG_LEVEL. Em produção recomendado "INFO"; depuração: "DEBUG".
+    # LOG_LEVEL (o campo não tem prefixo; o pydantic-settings deriva o nome
+    # do atributo). Em produção recomendado "INFO"; depuração: "DEBUG".
     log_level: str = "INFO"
+    # Retenção do log estruturado de auditoria (dias). Valores <=0 desativam a
+    # poda (o log cresceria indefinidamente). A poda roda dentro de
+    # registrar_evento — manutenção casada com escrita sob demanda, NUNCA um
+    # job agendado (AGENTS.md).
+    auditoria_retencao_dias: int = 90
 
     # ------------------------------------------------------------------
     # Templates (100% portáteis — residem DENTRO do repositório, nunca em
@@ -80,6 +87,17 @@ class Configuracoes(BaseSettings):
     # "X-API-Key". Se vazia, a API roda apenas com aviso de segurança
     # (destinada exclusivamente a ambiente localhost/desenvolvimento).
     relmeg_api_key: str = ""
+    # Quando RELMEG_REQUER_API_KEY=true e a chave estiver vazia, o startup
+    # ABORTA (fail-fast) em vez de subir a API exposta sem autenticação.
+    relmeg_requer_api_key: bool = False
+
+    # ------------------------------------------------------------------
+    # Rate limit — confiança no cabeçalho X-Forwarded-For
+    # ------------------------------------------------------------------
+    # False (padrão): o rate limit usa o endereço real do socket, imune a XFF
+    # forjado. True: confia no 1º endereço de X-Forwarded-For — use APENAS se o
+    # deploy roda atrás de reverse-proxy controlado (Vercel, Render, nginx).
+    confiar_xff: bool = False
 
     # ------------------------------------------------------------------
     # TSE (DivulgaCandContas) — parâmetros operacionais
@@ -114,6 +132,33 @@ class Configuracoes(BaseSettings):
     relmeg_cors_origins_extra: str = ""
 
     # ------------------------------------------------------------------
+    # Fallback por raspagem (Scrapling) — estepe quando a API falha
+    # ------------------------------------------------------------------
+    # True (padrão): conectores tentam raspar a página pública da fonte quando
+    # a API oficial falha (403/503/timeout) ou devolve vazio, e a CLDF ganha o
+    # histórico de andamento (a API dela só expõe a etapa atual). USO sempre
+    # sob demanda (disparado por uma extração on-demand do operador — AGENTS.md).
+    # False: desliga o fallback em todos os conectores (rotas seguem 4xx/5xx).
+    usa_scrapling: bool = True
+    # Tolerância do browser headless do Scrapling (em MILISSEGUNDOS).
+    scrapling_timeout_ms: int = 45_000
+
+    # ------------------------------------------------------------------
+    # Camada HTTP universal do relmeg_core (conectores legislativos)
+    # ------------------------------------------------------------------
+    # Padrão de chamadas HTTP compartilhado por TODOS os conectores do motor
+    # (Câmara, Senado, CLDF, ALGO, DOU...). O retry aplica Exponential Backoff
+    # + Jitter sobre 403/429/5xx e erros de rede, como já é feito no TSE.
+    http_timeout: float = 30.0
+    http_max_tentativas: int = 3
+    http_backoff_base: float = 0.5
+    http_backoff_jitter: float = 0.5
+    http_user_agent: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    )
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
     @property
@@ -131,6 +176,11 @@ class Configuracoes(BaseSettings):
         """Pasta dos Relatórios Executivos PDF: <entregas>/Relatórios."""
         return self.dir_entregas / self.subdir_relatorios
 
+    @property
+    def dir_perfil(self) -> Path:
+        """Pasta das planilhas de perfil/coleta de parlamentares: <entregas>/Perfil."""
+        return self.dir_entregas / self.subdir_perfil
+
     def garantir_diretorios(self) -> Tuple[Path, ...]:
         """Cria (se ausentes) as pastas essenciais do projeto.
 
@@ -142,6 +192,7 @@ class Configuracoes(BaseSettings):
             self.dir_tse,
             self.dir_novas_proposicoes_pasta,
             self.dir_relatorios,
+            self.dir_perfil,
             self.data_dir,
             self.log_dir,
             self.relmeg_cache_db.parent,
