@@ -1,3 +1,4 @@
+import hmac
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -14,6 +15,7 @@ from starlette.responses import JSONResponse
 
 from rate_limit import limiter
 from config import settings
+from modelo_base import contrato_disponivel
 from extrator_tse import router as rotas_extrator_tse
 from exportador_local import router as rotas_exportador_local
 from exportador_pdf import router as rotas_exportador_pdf
@@ -30,6 +32,7 @@ from routers import (
     fachada,
     planilha,
     auditoria,
+    hub,
 )
 from routers.senado import materias as senado_materias, comissoes as senado_comissoes
 
@@ -118,10 +121,19 @@ def _validar_dependencias_criticas() -> None:
             "Startup abortado: o template crítico está ausente. Restaure os "
             "arquivos em backend/templates/ e reinicie."
         )
-    if not settings.modelo_base_template.exists():
+    if settings.relmeg_requer_api_key and not settings.relmeg_api_key:
+        logger.critical(
+            "FALHA FATAL NO STARTUP — RELMEG_REQUER_API_KEY=true mas RELMEG_API_KEY "
+            "está vazia. Configure a chave em backend/.env antes de expor a API."
+        )
+        raise RuntimeError(
+            "Startup abortado: aplicação exige autenticação, mas a chave "
+            "RELMEG_API_KEY não foi definida."
+        )
+    if not contrato_disponivel():
         logger.warning(
-            "MODELO BASE ausente em {} — será usado o gabarito canônico de fallback.",
-            settings.modelo_base_template,
+            "MODELO BASE ausente (contrato do operador e cópia interna) — "
+            "será usado o gabarito canônico de fallback.",
         )
 
 
@@ -165,7 +177,9 @@ class _VerificarApiKey(BaseHTTPMiddleware):
             return await call_next(request)
         if request.url.path in _CAMINHOS_ISENTOS_API_KEY:
             return await call_next(request)
-        if request.headers.get("X-API-Key") != settings.relmeg_api_key:
+        enviada = request.headers.get("X-API-Key") or ""
+        # compare_digest: comparação em tempo constante (imune a timing attack).
+        if not enviada or not hmac.compare_digest(enviada, settings.relmeg_api_key):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "API key ausente ou inválida. Envie o header X-API-Key."},
@@ -242,6 +256,7 @@ app.include_router(ai.router, prefix="/api")
 app.include_router(fachada.router)
 app.include_router(planilha.router)
 app.include_router(auditoria.router)
+app.include_router(hub.router)
 
 @app.get("/")
 @limiter.limit("60/minute")
