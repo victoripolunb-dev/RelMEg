@@ -19,8 +19,7 @@ Referências:
 from __future__ import annotations
 
 import asyncio
-import re
-from datetime import date, datetime
+from datetime import date
 from typing import Any, Dict, List, Optional, Sequence
 
 import httpx
@@ -32,21 +31,11 @@ from relmeg_core.connectors.base_connector import (
     LegislativoConnector,
 )
 from relmeg_core.models.schemas import ParlamentarModel, ProjetoDeLeiModel, TramitacaoModel
+from relmeg_core.utils.helpers import para_int, parse_date_iso
 
 URL_BASE = "https://legis.senado.leg.br/dadosabertos"
 # Página pública da matéria — fallback de raspagem quando a API falha.
 URL_MATERIA_PUBLICA = "https://www25.senado.leg.br/web/atividade/materias/-/materia"
-
-
-def _para_int(valor: Any, default: Optional[int] = 0) -> Optional[int]:
-    """Extrai o primeiro inteiro de um valor (formato numérico robusto)."""
-    m = re.search(r"\d+", str(valor or ""))
-    if not m:
-        return default
-    try:
-        return int(m.group(0))
-    except (TypeError, ValueError):
-        return default
 
 
 def _sem_erro(valor: Any) -> Optional[Dict[str, Any]]:
@@ -55,18 +44,9 @@ def _sem_erro(valor: Any) -> Optional[Dict[str, Any]]:
         return None
     return valor
 
-
-def _data_iso(valor: Any) -> Optional[date]:
-    """Normaliza data/hora da fonte para ``date`` (ou None se inválida)."""
-    if not valor:
-        return None
-    try:
-        return datetime.fromisoformat(str(valor).strip().replace("Z", "+00:00")).date()
-    except ValueError:
-        try:
-            return date.fromisoformat(str(valor)[:10])
-        except ValueError:
-            return None
+# Compat: helpers compartilhados (módulo relmeg_core.utils.helpers).
+_para_int = para_int
+_data_iso = parse_date_iso
 
 
 def _lista(valor: Any) -> List[Any]:

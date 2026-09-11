@@ -30,6 +30,12 @@ from relmeg_core.models.schemas import ParlamentarModel, ProjetoDeLeiModel, Tram
 
 CORPO_ERRO_HTTP = "Falha de requisição HTTP no conector {fonte}: {detalhe}"
 
+# Códigos de status que JUSTIFICAM retry (falhas transitórias de servidor/limite
+# de taxa/bloqueio temporário). Erros definitivos (400, 401, 404, 422...) sobem
+# imediatamente sem gastar tentativas — retentar 404 é desperdício e atrasa a
+# resposta ao operador.
+_HTTP_RETRYAVEIS = {403, 408, 429, 500, 502, 503, 504}
+
 
 class BuscaNaoSuportada(NotImplementedError):
     """Fonte não oferece busca por palavras-chave via API pública.
@@ -217,7 +223,7 @@ class LegislativoConnector(ABC):
     ) -> Dict[str, Any]:
         """GET JSON com retry exponencial + jitter (403/429/5xx e erros de rede)."""
         return await self._tentar(
-            lambda client, url=url, params=params, headers=headers: client.get(url, params=params),
+            lambda client, url=url, params=params: client.get(url, params=params),
             headers=headers,
         )
 
@@ -231,7 +237,7 @@ class LegislativoConnector(ABC):
     ) -> Dict[str, Any]:
         """POST JSON com retry exponencial + jitter; corpos podem ser ``dict`` ou listas."""
         return await self._tentar(
-            lambda client, url=url, json=json, params=params, headers=headers: client.post(url, json=json, params=params),
+            lambda client, url=url, json=json, params=params: client.post(url, json=json, params=params),
             headers=headers,
         )
 
@@ -272,30 +278,51 @@ class LegislativoConnector(ABC):
         *,
         headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
-        """Núcleo do retry: executa ``acao`` (função assíncrona sobre o client)."""
+        """Núcleo do retry: executa ``acao`` (função assíncrona sobre o client).
+
+        Retenta APENAS falhas transitórias: erros de rede/timeout e códigos
+        HTTP retryáveis (``_HTTP_RETRYAVEIS``). 4xx definitivos (404, 400, 422)
+        e 5xx irreversíveis sobem na primeira tentativa.
+        """
         tentativa = 0
         while True:
             tentativa += 1
             try:
                 async with self._cliente(headers) as client:
                     resposta = await acao(client)
-                    resposta.raise_for_status()
+                    if resposta.status_code >= 400:
+                        if (
+                            resposta.status_code in _HTTP_RETRYAVEIS
+                            and tentativa < self.max_tentativas
+                        ):
+                            await self._aguardar_retry(tentativa, exc=resposta.status_code)
+                            continue
+                        logger.warning(
+                            CORPO_ERRO_HTTP,
+                            fonte=self.fonte,
+                            detalhe=f"HTTP {resposta.status_code}",
+                        )
+                        resposta.raise_for_status()
                     return resposta.json()
-            except httpx.HTTPError as exc:
+            except httpx.TransportError as exc:
                 if tentativa >= self.max_tentativas:
                     logger.warning(CORPO_ERRO_HTTP, fonte=self.fonte, detalhe=exc)
                     raise
-                atraso = self.backoff_base * (2 ** (tentativa - 1))
-                atraso += random.uniform(0, self.backoff_jitter)
-                logger.debug(
-                    "Conector {fonte}: retry {t}/{m} após {s:.2f}s ({detalhe})",
-                    fonte=self.fonte,
-                    t=tentativa,
-                    m=self.max_tentativas,
-                    s=atraso,
-                    detalhe=exc,
-                )
-                await asyncio.sleep(atraso)
+                await self._aguardar_retry(tentativa, exc=exc)
+
+    async def _aguardar_retry(self, tentativa: int, exc: Any) -> None:
+        """Backoff exponencial + jitter entre tentativas de retry."""
+        atraso = self.backoff_base * (2 ** (tentativa - 1))
+        atraso += random.uniform(0, self.backoff_jitter)
+        logger.debug(
+            "Conector {fonte}: retry {t}/{m} após {s:.2f}s ({detalhe})",
+            fonte=self.fonte,
+            t=tentativa,
+            m=self.max_tentativas,
+            s=atraso,
+            detalhe=exc,
+        )
+        await asyncio.sleep(atraso)
 
     @staticmethod
     def _fonte_mesma_fonte(id_externo: str, fonte: str) -> str:

@@ -166,6 +166,8 @@ def montar_relatorio_de_clipping(
     senado = resultado.get("senado") or []
     total = resultado.get("total") or (len(camara) + len(senado))
     descartados = filtro.get("descartados_total") or 0
+    coletado_total = total + descartados
+    taxa_aprovacao = f"{total / coletado_total:.0%}" if coletado_total > 0 else "—"
 
     kpis = [
         {
@@ -179,9 +181,9 @@ def montar_relatorio_de_clipping(
             "nota": filtro.get("matriz", "Family Talks"),
         },
         {
-            "rotulo": "Aprovados pelo filtro",
-            "valor": str(total),
-            "nota": "Cruzamento com os temas prioritários",
+            "rotulo": "Taxa de aprovação",
+            "valor": taxa_aprovacao,
+            "nota": f"de {coletado_total} proposições coletadas",
         },
         {
             "rotulo": "Descartados (filtro institucional)",
@@ -477,7 +479,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from starlette.requests import Request
 
-from exportador_local import ClippingError, _gerar_clipping_async
+from servicos.exportador_local import ClippingError, _gerar_clipping_async
 from rate_limit import limiter
 
 router = APIRouter(prefix="/api/exportar", tags=["Exportação — Relatório Executivo PDF"])

@@ -1,46 +1,56 @@
-from fastapi import APIRouter, Query
-from typing import Optional
-import requests
+from typing import Dict, List, Any, Optional
+
+import httpx
+from fastapi import APIRouter, HTTPException, Query
+from starlette.requests import Request
+
+from rate_limit import limiter, LIMITE_PROPOSICOES
 
 router = APIRouter(prefix="/eventos", tags=["Eventos e Audiências"])
 
-@router.get("/")
-def listar_eventos(
-    dataInicio: Optional[str] = Query(None, description="Data inicial no formato AAAA-MM-DD"),
-    dataFim: Optional[str] = Query(None, description="Data final no formato AAAA-MM-DD"),
-    itens: int = Query(10, ge=1, le=100, description="Quantidade máxima de eventos")
+_URL_BASE = "https://dadosabertos.camara.leg.br/api/v2/eventos"
+_HEADERS = {"Accept": "application/json"}
+_PADRAO_DATA_ISO = r"^\d{4}-\d{2}-\d{2}$"
+
+
+@router.get("/", response_model=Dict[str, Any])
+@limiter.limit(LIMITE_PROPOSICOES)
+async def listar_eventos(
+    request: Request,
+    dataInicio: Optional[str] = Query(None, pattern=_PADRAO_DATA_ISO, description="Data inicial no formato AAAA-MM-DD"),
+    dataFim: Optional[str] = Query(None, pattern=_PADRAO_DATA_ISO, description="Data final no formato AAAA-MM-DD"),
+    itens: int = Query(10, ge=1, le=100, description="Quantidade máxima de eventos"),
 ):
     """Busca agenda de reuniões, audiências públicas e eventos na Câmara."""
-    url = "https://dadosabertos.camara.leg.br/api/v2/eventos"
-
-    params = {
+    params: Dict[str, Any] = {
         "itens": itens,
         "ordem": "asc",
-        "ordenarPor": "dataHoraInicio"
+        "ordenarPor": "dataHoraInicio",
     }
-
     if dataInicio:
         params["dataInicio"] = dataInicio
     if dataFim:
         params["dataFim"] = dataFim
 
-    resposta = requests.get(url, params=params, timeout=(5, 30))
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), follow_redirects=True) as client:
+            resposta = await client.get(_URL_BASE, params=params, headers=_HEADERS)
+            resposta.raise_for_status()
+            dados = resposta.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível acessar a API de eventos",
+        ) from exc
 
-    if resposta.status_code == 200:
-        dados = resposta.json()
-        eventos_formatados = [
-            {
-                "id": ev["id"],
-                "dataHoraInicio": ev["dataHoraInicio"],
-                "descricao": ev["descricao"],
-                "descricaoTipo": ev["descricaoTipo"],
-                "local": ev.get("localSala", "Local não informado")
-            }
-            for ev in dados["dados"]
-        ]
-        return {
-            "total": len(eventos_formatados),
-            "eventos": eventos_formatados
+    eventos_formatados: List[Dict[str, Any]] = [
+        {
+            "id": ev.get("id"),
+            "dataHoraInicio": ev.get("dataHoraInicio"),
+            "descricao": ev.get("descricao"),
+            "descricaoTipo": ev.get("descricaoTipo"),
+            "local": ev.get("localSala", "Local não informado"),
         }
-    else:
-        return {"erro": "Não foi possível acessar a API de eventos", "status": resposta.status_code}
+        for ev in dados.get("dados", [])
+    ]
+    return {"total": len(eventos_formatados), "eventos": eventos_formatados}

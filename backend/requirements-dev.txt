@@ -1,0 +1,4 @@
+# Dependências de DESENVOLVIMENTO apenas (nunca instalar em produção).
+# Instalação:
+#   pip install -r requirements.txt -r requirements-dev.txt
+-P pytest==9.1.1

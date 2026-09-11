@@ -220,7 +220,7 @@ _INDICES = [
     "CREATE INDEX IF NOT EXISTS idx_auto_parl ON relmeg_autorias (autor_id_externo)",
 ]
 
-# As 22 chaves do DataFrame BI (COLUNAS_BI em extrator_tse.py) — nomeiam
+# As 22 chaves do DataFrame BI (COLUNAS_BI em servicos/extrator_tse.py) — nomeiam
 # exatamente as colunas da tabela bruta.
 CHAVES_DF = [
     "ano", "uf", "cargo", "id_candidato", "nome_urna", "nome_completo",

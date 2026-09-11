@@ -2,8 +2,8 @@
 import pytest
 from docx import Document
 
-import family_talks
-from exportador_local import (
+from servicos import family_talks
+from servicos.exportador_local import (
     ClippingError,
     _caminho_modelo,
     _data_br,
@@ -11,7 +11,7 @@ from exportador_local import (
     _dentro_janela,
     _substituir_corpo,
 )
-from family_talks import filtrar
+from servicos.family_talks import filtrar
 
 CAMARA_ITENS = [
     {
@@ -120,13 +120,13 @@ def test_dentro_janela_inclusiva_e_limites():
 
 
 def test_janela_inversa_gera_erro(monkeypatch):
-    from exportador_local import _gerar_clipping_async
+    from servicos.exportador_local import _gerar_clipping_async
 
     async def _falha_busca(keywords: list):
         raise AssertionError("não deveria buscar com janela inválida")
 
-    monkeypatch.setattr("exportador_local._buscar_camara", _falha_busca)
-    monkeypatch.setattr("exportador_local._buscar_senado", _falha_busca)
+    monkeypatch.setattr("servicos.exportador_local._buscar_camara", _falha_busca)
+    monkeypatch.setattr("servicos.exportador_local._buscar_senado", _falha_busca)
 
     import asyncio
 
@@ -145,7 +145,7 @@ def test_gerar_clipping_aplica_janela_de_data(monkeypatch):
     """A janela de datas é aplicada na busca real, antes do Family Talks."""
     from datetime import date
 
-    from exportador_local import _gerar_clipping_async
+    from servicos.exportador_local import _gerar_clipping_async
 
     async def _camara_fake(keywords: list):
         return CAMARA_ITENS
@@ -176,12 +176,12 @@ def test_gerar_clipping_aplica_janela_de_data(monkeypatch):
         pasta.mkdir(parents=True, exist_ok=True)
         return pasta
 
-    monkeypatch.setattr("exportador_local._buscar_camara", _camara_fake)
-    monkeypatch.setattr("exportador_local._buscar_senado", _senado_fake)
-    monkeypatch.setattr("exportador_local.Document", _doc_fake)
-    monkeypatch.setattr("exportador_local._caminho_modelo", _caminho_modelo_fake)
-    monkeypatch.setattr("exportador_local._pasta_entregas", _pasta_entregas_fake)
-    monkeypatch.setattr("exportador_local._substituir_corpo", lambda *a, **k: None)
+    monkeypatch.setattr("servicos.exportador_local._buscar_camara", _camara_fake)
+    monkeypatch.setattr("servicos.exportador_local._buscar_senado", _senado_fake)
+    monkeypatch.setattr("servicos.exportador_local.Document", _doc_fake)
+    monkeypatch.setattr("servicos.exportador_local._caminho_modelo", _caminho_modelo_fake)
+    monkeypatch.setattr("servicos.exportador_local._pasta_entregas", _pasta_entregas_fake)
+    monkeypatch.setattr("servicos.exportador_local._substituir_corpo", lambda *a, **k: None)
 
     import asyncio
 
@@ -247,7 +247,7 @@ def test_matriz_family_talks_temas_e_exclusoes():
 def test_rota_clipping_rejeita_template_ausente(monkeypatch):
     from fastapi.testclient import TestClient
 
-    import exportador_local
+    import servicos.exportador_local as exportador_local
     import main
 
     def _modelo_ausente():

@@ -1,25 +1,41 @@
-from fastapi import APIRouter
-import requests
+from typing import List, Dict, Any
+
+import httpx
+from fastapi import APIRouter, HTTPException, Query
+from starlette.requests import Request
+
+from rate_limit import limiter, LIMITE_PROPOSICOES
 
 router = APIRouter(prefix="/deputados", tags=["Deputados"])
 
-@router.get("/")
-def listar_deputados(itens: int = 3):
+_URL_BASE = "https://dadosabertos.camara.leg.br/api/v2/deputados"
+_HEADERS = {"Accept": "application/json"}
+
+
+@router.get("/", response_model=Dict[str, Any])
+@limiter.limit(LIMITE_PROPOSICOES)
+async def listar_deputados(
+    request: Request,
+    itens: int = Query(3, ge=1, le=100, description="Quantidade máxima de deputados"),
+):
     """Busca os primeiros parlamentares na API oficial da Câmara dos Deputados."""
-    url = f"https://dadosabertos.camara.leg.br/api/v2/deputados?itens={itens}"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), follow_redirects=True) as client:
+            resposta = await client.get(_URL_BASE, params={"itens": itens}, headers=_HEADERS)
+            resposta.raise_for_status()
+            dados = resposta.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível acessar a API da Câmara dos Deputados",
+        ) from exc
 
-    resposta = requests.get(url, timeout=(5, 30))
-
-    if resposta.status_code == 200:
-        dados = resposta.json()
-        deputados_formatados = [
-            {
-                "nome": dep["nome"],
-                "partido": dep["siglaPartido"],
-                "uf": dep["siglaUf"]
-            }
-            for dep in dados["dados"]
-        ]
-        return {"total": len(deputados_formatados), "deputados": deputados_formatados}
-    else:
-        return {"erro": "Não foi possível acessar a API da Câmara", "status": resposta.status_code}
+    deputados_formatados: List[Dict[str, Any]] = [
+        {
+            "nome": dep.get("nome"),
+            "partido": dep.get("siglaPartido"),
+            "uf": dep.get("siglaUf"),
+        }
+        for dep in dados.get("dados", [])
+    ]
+    return {"total": len(deputados_formatados), "deputados": deputados_formatados}

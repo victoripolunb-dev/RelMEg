@@ -20,7 +20,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from modelo_base import bytes_com_gabarito, gabarito_modelo, gravar_com_gabarito
+from servicos.modelo_base import bytes_com_gabarito, gabarito_modelo, gravar_com_gabarito
 
 NOMES_CASA = {
     "camara": "Câmara",
@@ -101,13 +101,27 @@ def gravar_planilha_coleta(
     return caminho
 
 
+def _token_seguro(valor: Any, maiusculas: bool = False) -> str:
+    """Sanitiza um componente de nome de arquivo: só letras, números, hífen e _.
+
+    Neutraliza separadores de caminho (``/``, ``\\``, ``..``) e caracteres
+    inválidos que chegariam de ``fonte``/``uf`` fornecidos pelo operador.
+    """
+    import re
+
+    texto = str(valor or "").strip()
+    texto = texto.upper() if maiusculas else texto.lower()
+    texto = re.sub(r"[^A-Za-z0-9_-]+", "-", texto)
+    return texto.strip("-_") or "todas"
+
+
 def nome_arquivo_coleta(
     fonte: str = "todas",
     uf: str = "todas",
 ) -> str:
-    """Nome dinâmico: Planilha_Coleta_{casa}_{uf}.xlsx."""
-    casa = (str(fonte).strip().lower() or "todas").replace(" ", "-")
-    regiao = str(uf).strip().lower() or "todas"
-    if regiao != "todas":
-        regiao = str(uf).strip().upper()
+    """Nome dinâmico: Planilha_Coleta_{casa}_{UF}.xlsx (componentes sanitizados)."""
+    regiao = str(uf or "").strip()
+    eh_uf = regiao and regiao.lower() != "todas"
+    casa = _token_seguro(fonte) if (fonte or "").strip().lower() != "todas" else "todas"
+    regiao = _token_seguro(uf, maiusculas=eh_uf)
     return f"Planilha_Coleta_{casa}_{regiao}.xlsx"

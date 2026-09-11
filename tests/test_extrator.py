@@ -1,4 +1,4 @@
-"""Testes do extrator TSE com o Modelo Base Dinâmico (backend/extrator_tse.py)."""
+"""Testes do extrator TSE com o Modelo Base Dinâmico (backend/servicos/extrator_tse.py)."""
 import asyncio
 import time
 
@@ -8,7 +8,7 @@ import pytest
 
 import database
 from config import settings
-from extrator_tse import (
+from servicos.extrator_tse import (
     ExtrairTSEError,
     _atraso_tentativa,
     _bens_individuais,
@@ -26,7 +26,7 @@ from extrator_tse import (
     estrutura_dataframe,
     obter_candidatos_cacheados,
 )
-from modelo_base import COLUNAS_MODELO_BASE, gabarito_modelo
+from servicos.modelo_base import COLUNAS_MODELO_BASE, gabarito_modelo
 
 CHAVE_GO = "tse|2026|GO|7|completo"
 
@@ -206,7 +206,7 @@ def test_cache_atende_do_banco_sem_chamar_api(monkeypatch):
     async def _falha(*args, **kwargs):
         raise AssertionError("API não deveria ser chamada com cache fresco!")
 
-    monkeypatch.setattr("extrator_tse.extrair_candidatos", _falha)
+    monkeypatch.setattr("servicos.extrator_tse.extrair_candidatos", _falha)
     dados, origem, chave = asyncio.run(
         obter_candidatos_cacheados(2026, "GO", 7, forcar_atualizacao=False)
     )
@@ -394,7 +394,7 @@ def test_get_json_rechama_apos_429_e_429(monkeypatch):
     global _cliente_atual
     _cliente_atual = _ClienteFake([429, 429])
     global _dormir_captura
-    monkeypatch.setattr("extrator_tse.asyncio.sleep", _dormir_captura)
+    monkeypatch.setattr("servicos.extrator_tse.asyncio.sleep", _dormir_captura)
     try:
         resultado = asyncio.run(_get_json(_cliente_atual, "http://tse.invalido/consultas"))
     finally:
@@ -412,7 +412,7 @@ def test_get_json_desiste_apos_todas_tentativas_403(monkeypatch):
     global _cliente_atual
     _cliente_atual = _ClienteFake([403, 403, 403])
     global _dormir_captura
-    monkeypatch.setattr("extrator_tse.asyncio.sleep", _dormir_captura)
+    monkeypatch.setattr("servicos.extrator_tse.asyncio.sleep", _dormir_captura)
     try:
         with pytest.raises(ExtrairTSEError) as exc:
             asyncio.run(_get_json(_cliente_atual, "http://tse.invalido/consultas"))
@@ -430,7 +430,7 @@ def test_get_json_rechama_apos_timeout_e_conclui(monkeypatch):
     global _cliente_atual
     _cliente_atual = _ClienteFake([httpx.ConnectTimeout("timeout")])
     global _dormir_captura
-    monkeypatch.setattr("extrator_tse.asyncio.sleep", _dormir_captura)
+    monkeypatch.setattr("servicos.extrator_tse.asyncio.sleep", _dormir_captura)
     try:
         resultado = asyncio.run(_get_json(_cliente_atual, "http://tse.invalido/consultas"))
     finally:
@@ -447,7 +447,7 @@ def test_get_json_nao_rechama_erro_404_definitivo(monkeypatch):
     global _cliente_atual
     _cliente_atual = _ClienteFake([404])
     global _dormir_captura
-    monkeypatch.setattr("extrator_tse.asyncio.sleep", _dormir_captura)
+    monkeypatch.setattr("servicos.extrator_tse.asyncio.sleep", _dormir_captura)
     try:
         with pytest.raises(ExtrairTSEError):
             asyncio.run(_get_json(_cliente_atual, "http://tse.invalido/consultas"))

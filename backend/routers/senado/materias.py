@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from starlette.requests import Request
 from typing import Optional
 import httpx
 import asyncio
 import re
+from loguru import logger
 
 from rate_limit import limiter, LIMITE_PROPOSICOES
 
@@ -62,7 +63,11 @@ async def _enriquecer_senado(
             "comissao": comissao,
             "relator": relator,
         }
-    except Exception:
+    except Exception as exc:
+        logger.debug(
+            "senado: enriquecimento falhou para matéria {id}: {tipo}: {e}",
+            id=id_processo, tipo=type(exc).__name__, e=exc,
+        )
         return {"situacao": None, "comissao": None, "relator": None}
 
 
@@ -172,7 +177,10 @@ async def _listar_materias_senado(
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             resposta = await client.get(URL_PESQUISA, params=params, headers=_HEADERS)
             if resposta.status_code != 200:
-                return {"erro": "Não foi possível acessar a API do Senado", "status": resposta.status_code}
+                raise HTTPException(
+                    status_code=502,
+                    detail="Não foi possível acessar a API do Senado",
+                )
 
             dados = resposta.json()
             pesquisa = dados.get("PesquisaBasicaMateria", {})
@@ -212,19 +220,21 @@ async def _listar_materias_senado(
                     ]
 
             if enriquecer and materias_formatadas:
-                alvo = materias_formatadas[:20]
                 riquezas = await asyncio.gather(
-                    *[_enriquecer_senado(client, m) for m in alvo]
+                    *[_enriquecer_senado(client, m) for m in materias_formatadas]
                 )
-                for materia, riqueza in zip(alvo, riquezas):
+                for materia, riqueza in zip(materias_formatadas, riquezas):
                     materia.update(riqueza)
 
             return {
                 "total": len(materias_formatadas),
                 "materias": materias_formatadas,
             }
-    except httpx.HTTPError:
-        return {"erro": "Não foi possível acessar a API do Senado", "status": 502}
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível acessar a API do Senado",
+        ) from exc
 
 
 @router.get("/")

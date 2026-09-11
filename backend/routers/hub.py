@@ -15,21 +15,17 @@ from urllib.parse import quote
 
 import asyncio
 
+import httpx
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
 
 from config import settings
 from rate_limit import limiter, LIMITE_PROPOSICOES
-from relmeg_core.connectors.algo import FonteSemApiPublica
-from relmeg_core.connectors.base_connector import BuscaNaoSuportada
+from relmeg_core.connectors.base_connector import BuscaNaoSuportada, FonteSemApiPublica
 from relmeg_core.connectors.dou import DOUSemFichaEstruturada
 from relmeg_core.orquestrador import obter_orquestrador
-
-
-def _modulo_database():
-    import database  # noqa: PLC0415 (módulo-irmão do app)
-
-    return database
+from relmeg_core.utils.helpers import modulo_database
 
 
 router = APIRouter(prefix="/hub", tags=["Hub Legislativo"])
@@ -49,6 +45,11 @@ def _erro_extracao(exc: Exception) -> HTTPException:
         return HTTPException(status_code=501, detail=str(exc))
     if isinstance(exc, ValueError):
         return HTTPException(status_code=400, detail=str(exc))
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404:
+        return HTTPException(
+            status_code=404,
+            detail="Registro não encontrado na fonte consultada (404).",
+        )
     logger.warning("hub: extração falhou — {tipo}: {e}", tipo=type(exc).__name__, e=exc)
     return HTTPException(
         status_code=502,
@@ -115,6 +116,7 @@ async def buscar_proposicoes_hub(
 
 
 @router.get("/proposicoes/listar")
+@limiter.limit(LIMITE_PROPOSICOES)
 async def listar_proposicoes(
     request: Request,
     fonte: Optional[str] = Query(None, description="Fonte canônica: camara, senado, cldf"),
@@ -124,7 +126,7 @@ async def listar_proposicoes(
     limite: int = Query(100, ge=1, le=500),
 ) -> Dict[str, Any]:
     """Lista proposições SALVAS no repositório local (nunca chama API externa)."""
-    db = _modulo_database()
+    db = modulo_database()
     try:
         itens = await asyncio.to_thread(
             db.listar_proposicoes,
@@ -143,7 +145,7 @@ async def obter_proposicao_salva(fonte: str, id_externo: str) -> Dict[str, Any]:
     O id pode conter barras (CLDF usa o formato "PL 2473/2026").
     """
     fonte = fonte.strip().lower()
-    db = _modulo_database()
+    db = modulo_database()
     try:
         projeto = await asyncio.to_thread(db.buscar_projeto, fonte, id_externo)
         if projeto is None:
@@ -202,6 +204,7 @@ async def coletar_proposicao(
 
 
 @router.get("/parlamentares/listar")
+@limiter.limit(LIMITE_PROPOSICOES)
 async def listar_parlamentares(
     request: Request,
     fonte: Optional[str] = Query(None, description="Fonte canônica: camara, senado, cldf"),
@@ -211,7 +214,7 @@ async def listar_parlamentares(
     limite: int = Query(100, ge=1, le=500),
 ) -> Dict[str, Any]:
     """Lista parlamentares SALVOS no repositório local (nunca chama API externa)."""
-    db = _modulo_database()
+    db = modulo_database()
     try:
         itens = await asyncio.to_thread(
             db.listar_parlamentares,
@@ -229,7 +232,7 @@ async def obter_parlamentar_salvo(fonte: str, id_externo: str) -> Dict[str, Any]
     404 se ainda não coletado — o operador deve disparar via POST.
     """
     fonte = fonte.strip().lower()
-    db = _modulo_database()
+    db = modulo_database()
     try:
         registro = await asyncio.to_thread(db.buscar_parlamentar, fonte, id_externo)
         if registro is None:
@@ -299,7 +302,7 @@ async def exportar_ficha(
     from relmeg_core.exportador_docx import FichaLegislativaError, gerar_ficha
 
     fonte = fonte.strip().lower()
-    db = _modulo_database()
+    db = modulo_database()
     try:
         projeto = await asyncio.to_thread(db.buscar_projeto, fonte, id_externo)
         if projeto is None:
@@ -348,7 +351,7 @@ async def exportar_ficha_parlamentar(
     from relmeg_core.exportador_docx import FichaLegislativaError, gerar_ficha_parlamentar
 
     fonte = fonte.strip().lower()
-    db = _modulo_database()
+    db = modulo_database()
     try:
         registro = await asyncio.to_thread(db.buscar_parlamentar, fonte, id_externo)
         if registro is None:
@@ -397,12 +400,12 @@ async def exportar_planilha_coleta(
     (celular, assessoria, contato, perfil...) ficam em branco para o trabalho
     de campo. Grava em ~/Desktop/RelMeg - Entregas/Perfil/.
     """
-    from exportador_planilha import (
+    from servicos.exportador_planilha import (
         gravar_planilha_coleta,
         nome_arquivo_coleta,
     )
 
-    db = _modulo_database()
+    db = modulo_database()
     try:
         parlamentares = await asyncio.to_thread(
             db.listar_parlamentares,

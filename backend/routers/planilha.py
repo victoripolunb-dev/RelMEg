@@ -93,16 +93,41 @@ def _ler_xlsx(conteudo: bytes) -> List[Dict[str, Any]]:
             continue
         if linha is None:
             continue
-        valores = [str(c or "").strip() if c is not None else "" for c in linha]
+        # Neutraliza fórmula antes de devolver ao cliente: células iniciadas
+        # com =,+,-,@ virariam comandos ao serem coladas em Excel/Sheets.
+        valores = [
+            _neutralizar_formula(str(c or "").strip()) if c is not None else ""
+            for c in linha
+        ]
         registro = {cabecalho[i]: v for i, v in enumerate(valores) if i < len(cabecalho)}
         if any(registro.values()):
             registros.append(registro)
     return registros
 
 
+def _detectar_delimitador(texto: str) -> str:
+    """Sniff do delimitador de um CSV (`,` ou `;`).
+
+    Usa o ``csv.Sniffer`` da stdlib; se a amostra for ambígua/insuficiente,
+    cai no padrão ``;`` (gerado pelas exportações do próprio RelMeg).
+    """
+    amostra = texto[:4096]
+    try:
+        s = csv.Sniffer()
+        if s.has_header(amostra):
+            return s.sniff(amostra, delimiters=";,").delimiter
+    except csv.Error:
+        pass
+    for delimitador in (",", ";"):
+        if amostra.count(delimitador) > 0:
+            return delimitador
+    return ";"
+
+
 def _ler_csv(conteudo: bytes) -> List[Dict[str, Any]]:
     texto = conteudo.decode("utf-8-sig", errors="replace")
-    leitor = csv.DictReader(io.StringIO(texto), delimiter=";")
+    delimitador = _detectar_delimitador(texto)
+    leitor = csv.DictReader(io.StringIO(texto), delimiter=delimitador)
     registros: List[Dict[str, Any]] = []
     for indice, linha in enumerate(leitor):
         if indice >= LIMITE_LINHAS_CSV:
@@ -110,7 +135,10 @@ def _ler_csv(conteudo: bytes) -> List[Dict[str, Any]]:
                 status_code=413,
                 detail=f"Planilha com mais de {LIMITE_LINHAS_CSV} linhas não é suportada.",
             )
-        normalizado = {str(k or "").strip().lower(): str(v or "").strip() for k, v in linha.items()}
+        normalizado = {
+            str(k or "").strip().lower(): _neutralizar_formula(str(v or "").strip())
+            for k, v in linha.items()
+        }
         if any(normalizado.values()):
             registros.append(normalizado)
     return registros
