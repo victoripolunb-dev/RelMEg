@@ -1,0 +1,17 @@
+{
+  "nome": "Energia",
+  "interesse": "Setor de energia elétrica e gás natural — associações, operadores de geração/transmissão/distribuição e comercialização, agências reguladoras (ANEEL, ANP) e Ministério de Minas e Energia.",
+  "palavras_chave": [
+    "ABRADEE", "ABEEólica", "ABiogás", "ABIAPE", "ABRAGE", "ABRATE",
+    "Renova Energia", "ANEEL", "energia elétrica", "concessão de energia",
+    "leilão de energia", "distribuidora de energia", "energia eólica",
+    "energia solar", "biogás", "biomassa", "hidrogênio", "tarifa de energia",
+    "mercado livre de energia", "Ministério de Minas e Energia",
+    "gás natural", "petróleo", "combustíveis", "usina", "transmissão elétrica"
+  ],
+  "orgaos": [
+    "agência nacional de energia elétrica",
+    "agência nacional do petróleo",
+    "ministério de minas e energia"
+  ]
+}
