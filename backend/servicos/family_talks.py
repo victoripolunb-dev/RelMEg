@@ -152,6 +152,7 @@ _TEMAS_FORA_ESCOPO: List[Dict[str, Any]] = [
     },
     {
         "tema": "Direito penal relacionado à dinâmica familiar",
+        "id": "penal",
         "palavras": [
             "tipificação penal", "sanção penal", "código penal", "reforma penal",
             "processo penal", "tribunal do júri", "execução penal", "regime prisional",
@@ -166,6 +167,19 @@ _TEMAS_FORA_ESCOPO: List[Dict[str, Any]] = [
         ],
     },
 ]
+
+
+_INFANCIA = (
+    "criança", "crianças", "adolescente", "adolescentes", "menor", "menores",
+    "infância", "estatuto da criança", "estatuto do adolescente",
+    "violência sexual", "exploração sexual", "violência contra a criança",
+)
+
+
+def _protege_infancia(texto_normalizado: str) -> bool:
+    """True se o texto (normalizado) trata da proteção de crianças/adolescentes,
+    o que prevalece sobre a exclusão automática da pauta estritamente penal."""
+    return any(_normaliza(termo) in texto_normalizado for termo in _INFANCIA)
 
 
 def _normaliza(texto: Any) -> str:
@@ -198,14 +212,20 @@ def analisar_texto(texto: Any) -> Dict[str, Any]:
     # 1) Exclusão automática primeiro (regras rígidas do cliente).
     for bloco in _TEMAS_FORA_ESCOPO:
         achados = _hits(bloco["palavras"], texto_norm)
-        if achados:
-            return {
-                "relevante": False,
-                "temas": [],
-                "termo_principal": achados[0],
-                "motivo": f"fora do escopo: {bloco['tema']} ({achados[0]})",
-                "fora_escopo": bloco["tema"],
-            }
+        if not achados:
+            continue
+        # Exceção: pauta penal que simultaneamente protege crianças/adolescentes
+        # (ex.: endurecer o combate à violência sexual infantil) não é descartada —
+        # a proteção da infância prevalece sobre o marcador "direito penal".
+        if bloco.get("id") == "penal" and _protege_infancia(texto_norm):
+            break
+        return {
+            "relevante": False,
+            "temas": [],
+            "termo_principal": achados[0],
+            "motivo": f"fora do escopo: {bloco['tema']} ({achados[0]})",
+            "fora_escopo": bloco["tema"],
+        }
 
     # 2) Temas prioritários.
     temas = []

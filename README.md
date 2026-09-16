@@ -1,109 +1,104 @@
 # RelMeg — Plataforma de Monitoramento Legislativo e Inteligência Parlamentar
 
-## Visão Geral
+> **Criado por:** Victor Souza de Aguiar
+> **Desenvolvido para:** Family Talks (OSCIP dedicada ao fortalecimento da família no Brasil)
 
-**RelMeg** é uma plataforma completa de monitoramento legislativo e inteligência de stakeholders desenvolvida para a **Family Talks** (OSCIP dedicada ao fortalecimento da família no Brasil). O sistema consolida dados de múltiplas APIs públicas do governo federal e gera relatórios de inteligência para advocacy, diálogo bipartidário e monitoramento de pautas familiares no Congresso Nacional.
+---
 
-Atua como um hub centralizado que conecta fontes governamentais dispersas e as transforma em relatórios acionáveis. **Toda coleta é estritamente sob demanda** — ver "Princípio Arquitetural" abaixo.
+## O que é
 
-## O Que Faz
+O **RelMeg** é uma plataforma completa de monitoramento legislativo e inteligência de
+stakeholders. Ele **centraliza e consolida dados de múltiplas APIs públicas do governo
+federal e estadual** — Câmara dos Deputados, Senado Federal, TSE (DivulgaCandContas),
+DOU (Diário Oficial da União), CLDF, ALESP e ALMG — e os transforma em **relatórios
+acionáveis** para advocacy e acompanhamento de pautas familiares no Congresso Nacional.
 
-### Fontes de Dados Integradas
+Atua como um **hub inteligente**: conecta fontes governamentais dispersas, aplica uma
+matriz de inteligência própria (Family Talks) para filtrar só o que interessa, e entrega
+documentos prontos para consumo (Word, PDF, Excel e JSON).
 
-| Fonte | Dados Coletados |
+---
+
+## Para que serve
+
+- **Monitorar o Congresso Nacional** em tempo real sobre pautas familiares (criança e
+  adolescente, licenças parentais, proteção à infância, idosos, educação, violência
+  doméstica e segurança digital);
+- **Identificar oportunidades de advocacy**: o operador sabe, em segundos, quais
+  proposições novas foram apresentadas no período e em qual tema elas se encaixam;
+- **Alimentar o diálogo bipartidário** com dados confiáveis e formatados — sem depender
+  de coleta manual;
+- **Produzir entregas recorrentes** (clipping semanal, relatórios, fichas, planilhas de
+  candidatos) com identidade visual padronizada da casa;
+- **Dar suporte a eleições**: extração, enriquecimento e consolidação de candidatos do
+  TSE com perfil, patrimônio, propostas e redes sociais.
+
+---
+
+## O que faz
+
+### Fontes de dados integradas
+
+| Fonte | Dados coletados |
 |-------|----------------|
-| **Câmara dos Deputados** | Deputados, proposições, eventos, autores, frentes parlamentares, busca por palavras-chave (`keywords`) e status legislativo |
+| **Câmara dos Deputados** | Deputados, proposições, eventos, autores, frentes parlamentares, busca por palavras-chave, varredura por janela de datas e status legislativo |
 | **Senado Federal** | Matérias legislativas, comissões, relatórios e pareceres |
-| **TSE (DivulgaCandContas)** | Candidatos (2018–2026), enriquecimento por candidato e **detalhe rico**: perfil, bens individuais, propostas e redes sociais |
-| **CLDF** | Proposições do PLE (DF) via API pública; **histórico de tramitação** via raspagem do portal (a API só expõe a etapa atual) |
-| **DOU (Diário Oficial da União)** | **Fonte de busca** (B5): publicações por palavra-chave, data, ano e seção — no hub (`fonte=dou`) e na rota legada `/dou/pesquisa` (mesma lógica no motor) |
-| **ALGO** | Esqueleto registrado (fonte reconhecida); responde 501 — sem API pública viável na V1 |
-| **ALMG** | Registrada (GET /hub/fontes informa o status); API "Dados Abertos" v2 **existe** — mapeamento futuro (CLDF é o piloto ALE) |
-| **ALESP** | Registrada; dados abertos publicados em **CSV/RDF** (bulk) — mapeamento futuro |
+| **TSE (DivulgaCandContas)** | Candidatos (2018–2026), enriquecimento por candidato e **detalhe rico**: perfil, bens individuais + agregados, propostas e redes sociais |
+| **CLDF** | Proposições do PLE (DF) via API pública; **histórico de tramitação** via raspagem (a API só expõe a etapa atual) |
+| **DOU (Diário Oficial da União)** | Publicações por palavra-chave, data, ano e seção |
+| **ALGO** | Esqueleto registrado (fonte reconhecida; responde 501 na V1) |
+| **ALMG / ALESP** | Registradas; mapeamento futuro (CLDF é o piloto ALE) |
 
-### Resiliência (Fallback Scrapling — B2/B3)
+### Resiliência (Fallback Scrapling)
 
-Quando a API oficial de uma fonte falha (403/503/timeout) ou devolve vazio, o motor tenta **raspar a página pública** da fonte usando o Scrapling (`USA_SCRAPLING=true`; instalar `requirements-extras.txt`):
+Quando a API oficial de uma fonte falha (403/503/timeout) ou devolve vazio, o motor tenta
+**raspar a página pública** com o Scrapling (`USA_SCRAPLING=true`) — Câmara (ficha de
+tramitação), Senado (linha do tempo), CLDF (histórico completo renderizado). Se mesmo a
+raspagem falhar, o conector devolve o que tem, sem jamais levantar. Toda raspagem ocorre
+dentro de uma requisição on-demand do operador (AGENTS.md).
 
-- **Câmara** — ficha de tramitação do portal (`fichadetramitacao`), HTML estável;
-- **Senado** — linha do tempo da matéria (extração por datas do texto da página);
-- **CLDF** — página "Acompanhar andamento" (renderizada por browser headless), entregando o **histórico completo** que a API pública não expõe.
+### Filtro Inteligente Family Talks
 
-Se o fallback não trouxer dados (markup mudou, página fora do ar), o conector devolve o que tem (etapa atual / `[]`) **sem jamais levantar** — a extração segue pela API oficial. Toda raspagem ocorre dentro de uma requisição on-demand do operador (AGENTS.md); não há varredura agendada.
+Filtro determinístico que cruza cada ementa com a **matriz de temas prioritários**:
 
-### Produtos Gerados
+- **Temas prioritários:** licença parental, proteção infantil, violência familiar,
+  primeira infância, segurança digital, cuidados com idosos, educação, assistência social;
+- **Descartados automaticamente:** divórcio, alienação parental, direito penal puro,
+  reforma tributária;
+- **Proteção da infância prevalece:** pauta penal que protege crianças/adolescentes
+  (ex.: endurecer o combate à violência sexual infantil gerada por IA) **não** é descartada.
 
-1. **Clipping Semanal (.docx)** — Documento Word seguindo o modelo "MODELO A SER SEGUIDO.docx", com proposições filtradas pela matriz de inteligência, prontas para envio via WhatsApp.
-2. **Relatório Executivo (.pdf)** — Relatório corporativo com KPIs, resumos temáticos e tabelas (ReportLab).
-3. **Planilha TSE (.xlsx)** — Exportação estruturada de candidatos seguindo o "MODELO BASE" (25 colunas), compatível com BI (Looker Studio, Google Sheets).
-4. **Ficha Legislativa / Ficha de Parlamentar (.docx)** — Dossiê individual de proposição ou de parlamentar, gerado do repositório local.
-5. **Dossiê Rico TSE (JSON)** — Detalhes máximos por candidato (perfil, **bens individuais + agregados** — maior/menor bem e distribuição por tipo —, **propostas estruturadas** e **redes sociais com plataforma**), persistidos e legíveis sem nova consulta à API.
-6. **Planilha de Coleta de Perfil (.xlsx)** — gabarito do **"Modelo base de coleta - Parlamentares.xlsx"** (contrato do operador; cópia interna em `backend/templates/MODELO BASE`) pré-preenchido com Casa/Nome/Partido/UF dos parlamentares salvos no hub; campos de contato/perfil em branco para o trabalho de campo. Grava em `~/Desktop/RelMeg - Entregas/Perfil/`.
+### Produtos gerados
 
-### Regra de Volume na Coleta
+1. **Clipping Semanal (.docx)** — documento Word clonado do template **"MODELO BASE.docx"**
+   (identidade da casa: fonte Montserrat, texto `333333`, links em negrito vermelho
+   `fe0000` sublinhado, caixa de período dinâmica "11/09 - 14/09"), com proposições
+   filtradas pela matriz Family Talks, prontas para envio via WhatsApp;
+2. **Relatório Executivo (.pdf)** — relatório corporativo com KPIs, resumos temáticos e
+   tabelas (ReportLab);
+3. **Planilha TSE (.xlsx)** — exportação estruturada de candidatos seguindo o
+   "MODELO BASE" (25 colunas) e **modelo MULTIABA** (multi-abas), compatível com BI
+   (Looker Studio, Google Sheets);
+4. **Ficha Legislativa / Ficha de Parlamentar (.docx)** — dossiê individual de proposição
+   ou parlamentar, gerado do repositório local;
+5. **Dossiê Rico TSE (JSON)** — detalhes máximos por candidato (perfil, bens individuais
+   + agregados, propostas estruturadas, redes sociais com plataforma), persistidos e
+   legíveis sem nova consulta à API;
+6. **Planilha de Coleta de Perfil (.xlsx)** — gabarito do "Modelo base de coleta -
+   Parlamentares.xlsx" pre-preenchido com Casa/Nome/Partido/UF para trabalho de campo,
+   gravado em `Perfil/`.
 
-- **Sem especificação = coleta o máximo** (ex.: TSE sem `campos` coleta perfil + bens + propostas + redes sociais por candidato).
-- **Especificou = restringe** (ex.: `campos=bens,propostas` persiste apenas os blocos pedidos; bloco inválido → 400).
+---
 
-### Matriz de Inteligência Family Talks
+## Como usar
 
-Filtro determinístico que classifica proposições contra uma matriz de prioridades temáticas:
+### Requisitos
 
-- **Temas prioritários:** licença parental, proteção infantil, violência familiar, primeira infância, segurança digital, cuidados com idosos.
-- **Temas descartados automaticamente:** lei de divórcio, alienação parental, direito penal, reforma tributária.
+- Python 3.10+ (o backend roda em `backend/` com seu próprio `.venv`);
+- Windows (padrão de desenvolvimento) — os scripts de ativação do venv abaixo são para
+  PowerShell; equivalentes Unix no comentário.
 
-## Princípio Arquitetural
-
-**Todas as chamadas a APIs governamentais são estritamente sob demanda** (ver AGENTS.md): disparadas apenas por ações explícitas do operador na interface — botão de busca, filtro, seleção de data. Proibido cron, polling em background, startup/lifespan que disparam varreduras ou auto-carregamento em abas do frontend.
-
-### Única Exceção Autorizada: `BackgroundTasks` em extração pesada sob demanda
-
-Aprovada em 07/09/2026 pelo operador ("Revisar AGENTS.md e implementar"), com requisitos rígidos:
-
-- **Disparo exclusivo por requisição HTTP explícita**: a `BackgroundTask` é registrada APENAS dentro da rota `/tse/exportar/{ano}/{uf}/{codigo_cargo}` (o próprio trigger on-demand) e retorna 202 + `task_id`, com status em `GET /tse/execucoes/{task_id}` e log de etapas persistido em `backend/database.py`.
-- A tarefa registrada deve baixar o payload inicial no próprio handler, e a varredura de enriquecimento não reutiliza caches após a falha da primeira chamada — sempre passando pelo cache SQLite local.
-- **Nunca** agendar, cron, startup/lifespan, dispatcher automático ou polling de fila. O worker é inerte sem a requisição do operador.
-- Manter os rate limits (slowapi) na rota de disparo, inclusive durante o processamento em background.
-- Recusar (400/409) disparo de segunda tarefa concorrente para os mesmos filtros enquanto uma execução do mesmo escopo estiver "Executando".
-
-## Entregas ao Cliente (Convenção Obrigatória — Aprovada em 07/09/2026)
-
-- **Pasta de entregas única**: todo artefato entregue ao cliente (relatórios, clippings, planilhas, extratos) deve ser gravado sob `~/Desktop/RelMeg - Entregas/` (config: `settings.dir_entregas`), em subpasta temática (`Relatórios/`, `Novas proposições/`, `TSE/`, `DOU/`, `Dashboards/`, `Perfil/`). Nunca deixar entregas na raiz do repositório.
-- **Formato padrão Word (.docx)** para relatórios e clippings — gerar com python-docx reutilizando a identidade da casa (fonte Montserrat, texto `333333`, links de destaque em negrito vermelho `ff0000`, como em `backend/exportador_local.py`). Arquivos de apoio (JSON/Excel) podem acompanhar o .docx na mesma subpasta.
-- Validação: o template `MODELO A SER SEGUIDO.docx` não deve ser sobrescrito; sempre clonar/gemar a partir dele quando aplicável (`exportador_local.py`).
-
-## Segurança
-
-- **API Key**: todas as rotas (exceto `/`, `/docs`, `/redoc`, `/openapi.json`) exigem `X-API-Key` quando `RELMEG_API_KEY` está definida; `RELMEG_REQUER_API_KEY=true` falha o startup (fail-fast) em vez de subir exposto.
-- **Rate limiting**: slowapi por rota (o disparo de extração tem limite próprio).
-- **CORS restritivo**: produção (Vercel) + localhost de desenvolvimento.
-- **Blindagem de planilha**: neutralização de fórmulas (`=`, `+`, `-`, `@`), rejeição de `.xlsx` quebrados (422) e limite de tamanho descomprimido (413, zip-bomb).
-- **Privacidade de paths**: rotas expõem apenas o nome do arquivo; caminhos absolutos ficam internos.
-- **Credenciais em `.env`**: nunca commitadas (`.gitignore`).
-
-## Rotas Principais
-
-| Endpoint | Método | Descrição |
-|----------|--------|-----------|
-| `/hub/fontes` | GET | Status das fontes do motor (sem rede). |
-| `/hub/busca/proposicoes` | GET | Busca por palavras-chave na fonte (`camara` e `dou` → 200; outras → 501). Sob demanda. |
-| `/hub/proposicoes/listar` | GET | Proposições salvas no repositório local. |
-| `/hub/proposicoes/{fonte}/{id}` | GET/POST | Ler salva / disparar coleta (gatilho on-demand). Inclui `autorias`. |
-| `/hub/parlamentares/listar` | GET | Parlamentares salvos. |
-| `/hub/parlamentares/{fonte}/{id}` | GET/POST | Ler salva (com `proposicoes_autoradas`) / disparar coleta. |
-| `/hub/exportar/ficha` | POST | Ficha Legislativa (.docx) de proposição já coletada. |
-| `/hub/exportar/ficha-parlamentar` | POST | Ficha de Parlamentar (.docx). |
-| `/hub/exportar/planilha-coleta` | POST | Planilha de Coleta de Perfil (.xlsx do MODELO BASE) a partir dos parlamentares salvos. |
-| `/tse/exportar/{ano}/{uf}/{cargo}` | GET | **Trigger de extração** (202 + task_id). `campos=` restringe blocos; vazio = máximo. |
-| `/tse/execucoes/{task_id}` | GET | Status e log de etapas da extração. |
-| `/tse/detalhe/{cache_key}/{id_candidato}` | GET | Dossiê rico do candidato (cache local, sem rede). |
-| `/tse/candidatos` | GET | Lista candidatos com filtros avançados. |
-| `/tse/candidato/{ano}/{uf}/{id}` | GET | Detalhe ao vivo do TSE (rede). |
-| `/deputados/`, `/proposicoes/`, `/eventos/`, `/frentes/` | GET | Câmara (rotas clássicas). |
-| `/senado/materias/`, `/senado/comissoes/` | GET | Senado. |
-| `/dou/pesquisa` | GET | Pesquisa no Diário Oficial. |
-
-## Instalação
+### Instalação
 
 ```bash
 git clone https://github.com/victoripolunb-dev/RelMEg.git
@@ -124,33 +119,153 @@ copy .env.example .env                # Windows
 # cp .env.example .env                # Linux/Mac
 ```
 
-## Variáveis de Ambiente
-
-| Variável | Padrão | Descrição |
-|----------|--------|-----------|
-| `RELMEG_API_KEY` | vazio | Chave `X-API-Key`. Se preenchida, todas as rotas exigem o header. |
-| `RELMEG_REQUER_API_KEY` | `false` | Se `true` com chave vazia, o startup ABORTA (fail-fast) em vez de subir exposto. |
-| `CONFIAR_XFF` | `false` | `true` apenas atrás de reverse-proxy controlado (Vercel/Render/nginx), para o rate limit confiar no 1º `X-Forwarded-For`. |
-| `USA_SCRAPLING` | `true` | Fallback por raspagem (Scrapling) quando a API oficial falha/fica vazia; a CLDF usa para buscar o histórico de andamento no portal. |
-| `SCRAPLING_TIMEOUT_MS` | `45000` | Tolerância do browser headless nas raspagens sob demanda. |
-| `RELMEG_DIR_ENTREGAS` | `~/Desktop/RelMeg - Entregas` | Pasta única de entregas ao cliente (convenção obrigatória). |
-| `RELMEG_CACHE_DB` | `backend/data/relmeg_cache.db` | Banco SQLite (cache + auditoria + motor legislativo). |
-| `RELMEG_LOG_LEVEL` | `INFO` | Nível do loguru. |
-| `RELMEG_CORS_ORIGINS_EXTRA` | vazio | Origens CORS adicionais (além do padrão). |
-| `AUDITORIA_RETENCAO_DIAS` | `90` | Retenção do log de auditoria e do detalhe rico TSE (≤0 desativa poda). |
-| `TSE_BASE_URL` | `https://divulgacandcontas.tse.jus.br/divulga/rest/v1` | Base da API do TSE. |
-| `TSE_CACHE_TTL` | `86400` | Validade do cache local (segundos; 0 desativa). |
-| `TSE_ID_ELEICAO_2026` | `2055502026` | **Confirme no portal** (o TSE bloqueou a verificação automática desta rede). |
-| `HTTP_TIMEOUT`, `HTTP_MAX_TENTATIVAS`, `TSE_MAX_CONCORRENCIA`, etc. | ver `config.py` | Parâmetros de retry/backoff/concorrência. |
-
-## Uso
+### Executar
 
 ```bash
-# Iniciar o servidor
 cd backend
 ..\backend\.venv\Scripts\uvicorn main:app --host 0.0.0.0 --port 8000
 # Documentação interativa: http://localhost:8000/docs
 ```
+
+### Fluxos principais do operador
+
+| Objetivo | Ação |
+|----------|------|
+| **Gerar clipping semanal de proposições novas** | `POST /api/exportar/clipping-semanal` com `data_inicio`/`data_fim` (janela do período); o sistema varre Câmara e Senado por sigla e data, filtra pela matriz e monta o `.docx` em `~/Desktop/RelMeg - Entregas/Novas proposições/` |
+| **Buscar proposições por palavra-chave** | `GET /hub/busca/proposicoes?fonte=camara&keywords=...` |
+| **Extrair candidatos do TSE** | `GET /tse/exportar/{ano}/{uf}/{cargo}` (retorna 202 + `task_id`; acompanhe em `GET /tse/execucoes/{task_id}`) |
+| **Montar ficha legislativa** | `POST /hub/exportar/ficha` passando a proposição já coletada |
+| **Pesquisar no DOU** | `GET /dou/pesquisa?q=...` |
+
+---
+
+## Principais rotas
+
+| Endpoint | Método | Descrição |
+|----------|--------|-----------|
+| `/hub/fontes` | GET | Status das fontes do motor (sem rede). |
+| `/hub/busca/proposicoes` | GET | Busca por palavras-chave na fonte (`camara` e `dou` → 200; outras → 501). Sob demanda. |
+| `/hub/proposicoes/listar` | GET | Proposições salvas no repositório local. |
+| `/hub/proposicoes/{fonte}/{id}` | GET/POST | Ler salva / disparar coleta (gatilho on-demand). Inclui `autorias`. |
+| `/hub/parlamentares/listar` | GET | Parlamentares salvos. |
+| `/hub/parlamentares/{fonte}/{id}` | GET/POST | Ler salva (com `proposicoes_autoradas`) / disparar coleta. |
+| `/hub/exportar/ficha` | POST | Ficha Legislativa (.docx) de proposição já coletada. |
+| `/hub/exportar/ficha-parlamentar` | POST | Ficha de Parlamentar (.docx). |
+| `/hub/exportar/planilha-coleta` | POST | Planilha de Coleta de Perfil (.xlsx do MODELO BASE) a partir dos parlamentares salvos. |
+| `/api/exportar/clipping-semanal` | POST | Clipping de Novas Proposições (.docx) com janela de datas e filtro Family Talks. |
+| `/tse/exportar/{ano}/{uf}/{cargo}` | GET | **Trigger de extração** (202 + task_id). `campos=` restringe blocos; vazio = máximo. |
+| `/tse/execucoes/{task_id}` | GET | Status e log de etapas da extração. |
+| `/tse/detalhe/{cache_key}/{id_candidato}` | GET | Dossiê rico do candidato (cache local, sem rede). |
+| `/tse/candidatos` | GET | Lista candidatos com filtros avançados. |
+| `/tse/candidato/{ano}/{uf}/{id}` | GET | Detalhe ao vivo do TSE (rede). |
+| `/deputados/`, `/proposicoes/`, `/eventos/`, `/frentes/` | GET | Câmara (rotas clássicas). |
+| `/senado/materias/`, `/senado/comissoes/` | GET | Senado. |
+| `/dou/pesquisa` | GET | Pesquisa no Diário Oficial. |
+
+---
+
+## Que resultado o sistema entrega
+
+- **Clipping semanal** identifica todas as proposições novas do período (varredura por
+  janela de datas e por sigla, sem depender de palavras-chave), as principais **20 itens**
+  relevantes para a Family Talks e salva o Word pronto no destino de entregas;
+- **Relatórios PDF e fichas .docx** com identidade visual padronizada (clonagem fiel do
+  modelo, nunca sobrescrita);
+- **Extração TSE completa** com cache local SQLite, enriquecimento por candidato e dossiês
+  ricos — tudo disponível **offline** após a coleta;
+- **Log de auditoria** em `backend/data/relmeg_cache.db`, com retenção configurável, para
+  rastrear cada operação.
+
+---
+
+## Princípio arquitetural: execução estritamente sob demanda
+
+**Nenhuma** chamada a APIs governamentais ocorre sem ação explícita do operador. Proibido:
+cron, polling em segundo plano, startup/lifespan que disparem varreduras ou
+auto-carregamento de abas no frontend (AGENTS.md).
+
+### Única exceção autorizada: `BackgroundTasks` em extração pesada sob demanda
+
+Aprovada em 07/09/2026 pelo operador, com requisitos rígidos:
+
+- **Disparo exclusivo por requisição HTTP explícita**: a `BackgroundTask` é registrada
+  APENAS dentro da rota `/tse/exportar/{ano}/{uf}/{codigo_cargo}` (o próprio trigger
+  on-demand) e retorna 202 + `task_id`, com status em `GET /tse/execucoes/{task_id}` e
+  log de etapas persistido em `backend/database.py`;
+- A tarefa baixa o payload inicial no próprio handler e a varredura de enriquecimento
+  sempre passa pelo cache SQLite local (nenhuma reutilização de cache após falha da
+  primeira chamada);
+- **Nunca** agendar, cron, dispatcher automático ou polling de fila — o worker é inerte
+  sem a requisição do operador;
+- Rate limits (slowapi) mantidos na rota de disparo, inclusive durante o processamento;
+- Recusa (400/409) de segunda tarefa concorrente para os mesmos filtros enquanto uma
+  execução do mesmo escopo estiver "Executando".
+
+---
+
+## Por que é tão importante
+
+1. **Economia de trabalho manual**: dezenas de horas de leitura de proposições são
+   substituídas por um clique — o clipping que antes levava um dia sai em segundos.
+2. **Ampla cobertura sem perder nada**: a varredura por janela de datas + siglas captura
+   o período inteiro, e o filtro automatizado descarta o ruído preservando o que interessa.
+3. **Advocacy baseado em dado**: a Family Talks chega ao Congresso sabendo exatamente o
+   que foi apresentado, quem assinou e em que tema a pauta se enquadra.
+4. **Deliverables com cara de produto**: Word/PDF/Excel com identidade visual da casa,
+   prontos para WhatsApp, e-mails e relatórios executivos.
+5. **Segurança e bom uso de API**: sob demanda, com rate-limit, cache local e retry com
+   backoff — protegendo o acesso às APIs públicas (evita bloqueios institucionais).
+6. **Confiança eleitoral**: o TSE é rastreado com dossiês ricos por candidato, úteis para
+   análise de biografia, patrimônio e propostas.
+
+---
+
+## Entregas ao cliente (convenção obrigatória)
+
+- **Pasta única de entregas**: `~/Desktop/RelMeg - Entregas/` (config `settings.dir_entregas`),
+  em subpasta temática (`Relatórios/`, `Novas proposições/`, `TSE/`, `DOU/`, `Dashboards/`,
+  `Perfil/`). Nunca deixar entregas na raiz do repositório;
+- **Formato padrão Word (.docx)** para relatórios e clippings — python-docx com a
+  identidade da casa (Montserrat, `333333`, links `fe0000` em negrito, como em
+  `backend/servicos/exportador_local.py`). Arquivos de apoio (JSON/Excel) acompanham o
+  .docx na mesma subpasta;
+- **Validação**: o template (ex.: `MODELO BASE.docx`) nunca é sobrescrito — o exportador
+  sempre clona a partir dele.
+
+---
+
+## Segurança
+
+- **API Key**: todas as rotas (exceto `/`, `/docs`, `/redoc`, `/openapi.json`) exigem
+  `X-API-Key` quando `RELMEG_API_KEY` está definida; `RELMEG_REQUER_API_KEY=true` falha o
+  startup (fail-fast) em vez de subir exposto;
+- **Rate limiting**: slowapi por rota (o disparo de extração tem limite próprio);
+- **CORS restritivo**: produção (Vercel) + localhost de desenvolvimento;
+- **Blindagem de planilha**: neutralização de fórmulas, rejeição de `.xlsx` quebrados
+  (422) e limite de tamanho descomprimido (413, zip-bomb);
+- **Privacidade de paths**: rotas expõem apenas o nome do arquivo;
+- **Credenciais em `.env`**: nunca commitadas (`.gitignore`).
+
+---
+
+## Variáveis de ambiente
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `RELMEG_API_KEY` | vazio | Chave `X-API-Key`. Se preenchida, todas as rotas exigem o header. |
+| `RELMEG_REQUER_API_KEY` | `false` | Se `true` com chave vazia, o startup ABORTA (fail-fast). |
+| `CONFIAR_XFF` | `false` | `true` apenas atrás de reverse-proxy controlado. |
+| `USA_SCRAPLING` | `true` | Fallback por raspagem (Scrapling) quando a API oficial falha. |
+| `SCRAPLING_TIMEOUT_MS` | `45000` | Tolerância do browser headless nas raspagens. |
+| `RELMEG_DIR_ENTREGAS` | `~/Desktop/RelMeg - Entregas` | Pasta única de entregas ao cliente. |
+| `RELMEG_CACHE_DB` | `backend/data/relmeg_cache.db` | Banco SQLite (cache + auditoria + motor). |
+| `RELMEG_LOG_LEVEL` | `INFO` | Nível do loguru. |
+| `TSE_ID_ELEICAO_2026` | `20322002026` | id_eleicao para 2026 (**confirmado em 16/09/2026**). |
+| `TSE_BASE_URL` | `https://divulgacandcontas.tse.jus.br/divulga/rest/v1` | Base da API do TSE. |
+| `TSE_CACHE_TTL` | `86400` | Validade do cache local (segundos; 0 desativa). |
+| `HTTP_TIMEOUT`, `HTTP_MAX_TENTATIVAS`, `TSE_MAX_CONCORRENCIA` etc. | ver `config.py` | Retry/backoff/concorrência. |
+
+---
 
 ## Testes
 
@@ -159,8 +274,13 @@ cd RelMEg
 backend\.venv\Scripts\python -m pytest tests -q
 ```
 
-A suíte usa `tempdir` para banco/entregas e URLs de API inválidas (zero rede). Inclui cobertura de conectores (Câmara, Senado, CLDF), hub, autorias, TSE (cache, reescrita atômica, detalhe rico) e auditoria.
+A suíte usa `tempdir` para banco/entregas e URLs de API inválidas (zero rede). Inclui
+cobertura de conectores (Câmara, Senado, CLDF), hub, autorias, TSE (cache, reescrita
+atômica, detalhe rico) e auditoria.
 
-## Licença
+---
 
+## Licença e autoria
+
+**Criado e mantido por Victor Souza de Aguiar** para a Family Talks.
 Uso interno — Family Talks.
