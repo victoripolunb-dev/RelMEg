@@ -128,10 +128,9 @@ class Configuracoes(BaseSettings):
         "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
     )
     # id_eleicao da API do DivulgaCandContas para as Eleições Gerais 2026.
-    # ATENÇÃO: o valor abaixo é o mais provável, mas o TSE bloqueou a
-    # verificação desta rede (403); confirme no portal e, se diferente,
-    # ajuste via env TSE_ID_ELEICAO_2026 (ex.: "2055502026").
-    tse_id_eleicao_2026: str = "2055502026"
+    # Confirmado pelo operador em 16/09/2026 (varredura TSE GO — Deputado
+    # Estadual). Sobrescrevível via env TSE_ID_ELEICAO_2026.
+    tse_id_eleicao_2026: str = "20322002026"
 
     # ------------------------------------------------------------------
     # CORS (origens extras além das padrão de main.py)

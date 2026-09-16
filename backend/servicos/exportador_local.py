@@ -48,7 +48,9 @@ from servicos import family_talks
 
 DIR_ENTREGAS = settings.dir_entregas
 SUBDIR = settings.subdir_novas_proposicoes
-MODELO_NOME = "MODELO A SER SEGUIDO.docx"
+# Template de referência editado pelo operador na pasta de entregas
+# (formato: caixa de período, títulos vermelhos, número sublinhado fe0000).
+MODELO_NOME = "MODELO BASE.docx"
 
 # Palavras-chave padrão: derivadas da matriz de inteligência Family Talks
 # (segue sendo sob demanda — o operador aciona a rota para varrer).
@@ -92,11 +94,15 @@ def _rotulo_arquivo_seguro(rotulo: Optional[str]) -> str:
 
 
 def _caminho_modelo() -> Path:
-    caminho = settings.modelo_clipping
+    # 1) Template editado pelo operador na pasta de entregas (fonte da verdade).
+    caminho = DIR_ENTREGAS / SUBDIR / MODELO_NOME
+    if not caminho.exists():
+        caminho = settings.modelo_clipping
     if not caminho.exists():
         raise ClippingError(
-            "Modelo 'MODELO A SER SEGUIDO.docx' não encontrado. Confirme que ele "
-            "está na pasta backend/templates/ do repositório e tente novamente."
+            f"Modelo não encontrado em: {caminho}. Confirme que "
+            f"'{MODELO_NOME}' está em 'RelMeg - Entregas/{SUBDIR}/' "
+            "ou na pasta backend/templates/ do repositório."
         )
     return caminho
 
@@ -165,36 +171,72 @@ async def _enriquecer_camara_autor_data(
     return {"autor": ", ".join(autores) or None, "data": data}
 
 
-async def _buscar_camara(keywords: List[str]) -> List[Dict[str, Any]]:
-    """Busca proposições na Câmara por palavras-chave e enriquece autor/data.
+async def _buscar_camara(
+    keywords: List[str],
+    data_inicio: Optional[_dt.date] = None,
+    data_fim: Optional[_dt.date] = None,
+) -> List[Dict[str, Any]]:
+    """Busca proposições na Câmara e enriquece autor/data.
 
-    Primeiro cruza TODAS as keywords e deduplica por id; só então enriquece
-    cada resultado único (evita chamadas repetidas à API quando a mesma
-    proposição aparece em mais de uma keyword).
+    Quando uma janela de apresentação é informada, varre a API por intervalo
+    de datas (dataApresentacaoInicio/Fim) para cada sigla da matriz Family
+    Talks, com paginação — captura TUDO do período, sem depender do recall
+    limitado da busca por keyword. Sem janela, mantém o fallback por keyword.
     """
     resultados: Dict[int, Dict[str, Any]] = {}
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), follow_redirects=True) as client:
-        for kw in keywords:
-            try:
-                dados = await _listar_proposicoes(
-                    siglaTipo=None, ano=None, keywords=kw,
-                    itens=20, enriquecer=False,
-                )
-            except Exception:
-                continue
-            for prop in dados.get("proposicoes") or []:
-                pid = prop.get("id")
-                if pid is not None:
-                    resultados.setdefault(pid, prop)
+        if data_inicio and data_fim:
+            for sigla in family_talks.SIGLAS_CAMARA:
+                pagina = 1
+                while True:
+                    params = {
+                        "dataApresentacaoInicio": data_inicio.isoformat(),
+                        "dataApresentacaoFim": data_fim.isoformat(),
+                        "siglaTipo": sigla,
+                        "itens": 100,
+                        "ordem": "asc",
+                        "ordenarPor": "id",
+                        "pagina": pagina,
+                    }
+                    try:
+                        resposta = await client.get(URL_CAMARA_BASE, params=params, headers=_HEADERS)
+                        if resposta.status_code != 200:
+                            break
+                    except httpx.HTTPError:
+                        break
+                    bloco = (resposta.json() or {}).get("dados") or []
+                    for prop in bloco:
+                        prop.update(await _enriquecer_camara_autor_data(client, prop))
+                        pid = prop.get("id")
+                        if pid is not None:
+                            resultados.setdefault(pid, prop)
+                    links = (resposta.json() or {}).get("links") or []
+                    tem_proxima = any(l.get("rel") == "next" and l.get("href") for l in links)
+                    if len(bloco) < 100 or not tem_proxima:
+                        break
+                    pagina += 1
+        else:
+            for kw in keywords:
+                try:
+                    dados = await _listar_proposicoes(
+                        siglaTipo=None, ano=None, keywords=kw,
+                        itens=20, enriquecer=False,
+                    )
+                except Exception:
+                    continue
+                for prop in dados.get("proposicoes") or []:
+                    pid = prop.get("id")
+                    if pid is not None:
+                        resultados.setdefault(pid, prop)
 
-        # A lista da Câmara vem sem autor/data; enriquece cada proposição única
-        # exatamente uma vez — erro individual não descarta o item.
-        for prop in resultados.values():
-            prop.update(await _enriquecer_camara_autor_data(client, prop))
+            # A lista da Câmara vem sem autor/data; enriquece cada proposição
+            # única exatamente uma vez — erro individual não descarta o item.
+            for prop in resultados.values():
+                prop.update(await _enriquecer_camara_autor_data(client, prop))
 
     lista = list(resultados.values())
-    lista.sort(key=lambda p: str(p.get("numero") or ""))
+    lista.sort(key=lambda p: (str(p.get("data") or ""), str(p.get("numero") or "")))
     return lista
 
 
@@ -322,9 +364,10 @@ def _proposicao_hiperlink(doc: Document, numero: str, url: str) -> OxmlElement:
     rPr.append(fontes)
     bold = OxmlElement("w:b"); bold.set(qn("w:val"), "1"); rPr.append(bold)
     boldCs = OxmlElement("w:bCs"); boldCs.set(qn("w:val"), "1"); rPr.append(boldCs)
-    cor = OxmlElement("w:color"); cor.set(qn("w:val"), "ff0000"); rPr.append(cor)
+    cor = OxmlElement("w:color"); cor.set(qn("w:val"), "fe0000"); rPr.append(cor)
     sz = OxmlElement("w:sz"); sz.set(qn("w:val"), str(TAMANHO_PT * 2)); rPr.append(sz)
     szCs = OxmlElement("w:szCs"); szCs.set(qn("w:val"), str(TAMANHO_PT * 2)); rPr.append(szCs)
+    sub = OxmlElement("w:u"); sub.set(qn("w:val"), "single"); rPr.append(sub)
     run.append(rPr)
     t = OxmlElement("w:t")
     t.set(qn("xml:space"), "preserve")
@@ -405,11 +448,20 @@ def _substituir_corpo(doc: Document, camara: List[Dict], senado: List[Dict]) -> 
     titulo_camara = doc.paragraphs[indice_titulo_camara]
     titulo_senado = doc.paragraphs[indice_titulo_camara + 1]
 
-    # Insere os blocos da Câmara após o título da Câmara.
-    _inserir_blocos(doc, titulo_camara, camara, proto_numero, proto_corpo, casa="camara")
+    # Insere os blocos da Câmara após o título da Câmara (2 vazios após o
+    # título e 2 vazios antes do título do Senado — como no modelo).
+    _inserir_blocos(
+        doc, titulo_camara, camara, proto_numero, proto_corpo,
+        casa="camara", espacos_iniciais=2, espacos_finais=2,
+    )
 
-    # Insere os blocos do Senado após o título do Senado.
-    _inserir_blocos(doc, titulo_senado, senado, proto_numero, proto_corpo, casa="senado")
+    # Insere os blocos do Senado após o título do Senado (1 vazio após o
+    # título e 2 vazios no fim do documento — como no modelo). Sem itens, o
+    # título do Senado é mantido e fica apenas a estrutura vazia da seção.
+    _inserir_blocos(
+        doc, titulo_senado, senado, proto_numero, proto_corpo,
+        casa="senado", espacos_iniciais=1, espacos_finais=2,
+    )
 
 
 def _paragrafo_vazio(doc: Document, proto: Any) -> Any:
@@ -422,16 +474,38 @@ def _paragrafo_vazio(doc: Document, proto: Any) -> Any:
     return Paragraph(p, doc)
 
 
+def _atualizar_periodo_banner(doc: Document, data_inicio: Optional[_dt.date],
+                              data_fim: Optional[_dt.date]) -> None:
+    """Substitui o período exibido na caixa vermelha do modelo (ex: '02/03 - 06/03')
+    pelos limites da janela informada, sem alterar a identidade visual."""
+    if data_inicio is None or data_fim is None:
+        return
+    novo = f"{data_inicio:%d/%m} - {data_fim:%d/%m}"
+    padrao = re.compile(r"^\d{2}/\d{2}\s*-\s*\d{2}/\d{2}$")
+
+    def _visita(elemento):
+        for filho in elemento:
+            if filho.tag == qn("w:t") and padrao.match(filho.text or ""):
+                filho.text = novo
+                continue
+            _visita(filho)
+
+    _visita(doc.element.body)
+
+
 def _inserir_blocos(doc: Document, ref_par: Any, itens: List[Dict], proto_numero: Any,
-                    proto_corpo: Any, casa: str) -> None:
+                    proto_corpo: Any, casa: str, espacos_iniciais: int = 1,
+                    espacos_finais: int = 0) -> Any:
     """Insere, logo após ref_par, um bloco por proposição (número/ementa/autor/data),
-    com um espaçador em branco entre blocos — replicando o modelo."""
+    com espaçadores em branco replicando a estrutura do modelo. Devolve o último
+    parágrafo inserido (para encadeamento pelo chamador)."""
     anterior = ref_par
 
-    # O modelo tem um parágrafo em branco logo após cada título de seção.
-    esp_inicial = _paragrafo_vazio(doc, proto_numero)
-    anterior._p.addnext(esp_inicial._p)
-    anterior = esp_inicial
+    # O modelo tem 1-2 parágrafos em branco logo após o título de seção.
+    for _ in range(espacos_iniciais):
+        esp_inicial = _paragrafo_vazio(doc, proto_numero)
+        anterior._p.addnext(esp_inicial._p)
+        anterior = esp_inicial
 
     for indice, item in enumerate(itens):
         if indice > 0:
@@ -461,12 +535,21 @@ def _inserir_blocos(doc: Document, ref_par: Any, itens: List[Dict], proto_numero
             p_aut = _paragrafo_valor(doc, proto_corpo, "Autor: ", autor)
             anterior._p.addnext(p_aut._p); anterior = p_aut
             # Data
-            p_dat = _paragrafo_valor(doc, proto_corpo, "Data de apresentação: ", data)
+            p_dat = _paragrafo_valor(doc, proto_corpo, "Data: ", data)
             anterior._p.addnext(p_dat._p); anterior = p_dat
         else:
             # Fallback (sem protótipo): parágrafo único com tudo.
             p = _paragrafo_valor(doc, proto_numero, numero, ementa)
             anterior._p.addnext(p._p); anterior = p
+
+    # Espaçadores finais (replicando o fechamento do modelo, ex: vazio antes do
+    # título do Senado ou vazios de fim de documento).
+    for _ in range(espacos_finais):
+        esp_fim = _paragrafo_vazio(doc, proto_numero)
+        anterior._p.addnext(esp_fim._p)
+        anterior = esp_fim
+
+    return anterior
 
 
 async def _gerar_clipping_async(
@@ -507,7 +590,7 @@ async def _gerar_clipping_async(
 
     # 1) Busca de dados (sob demanda).
     camara_bruta, senado_bruto = await asyncio.gather(
-        _buscar_camara(palavras),
+        _buscar_camara(palavras, data_inicio=data_inicio, data_fim=data_fim),
         _buscar_senado(palavras),
     )
 
@@ -534,6 +617,7 @@ async def _gerar_clipping_async(
 
     # 3) Geração a partir do modelo (template já validado no início).
     doc = Document(str(caminho_modelo))
+    _atualizar_periodo_banner(doc, data_inicio, data_fim)
     _substituir_corpo(doc, camara, senado)
 
     # 4) Salvamento (nunca sobrescreve o modelo).

@@ -122,7 +122,7 @@ def test_dentro_janela_inclusiva_e_limites():
 def test_janela_inversa_gera_erro(monkeypatch):
     from servicos.exportador_local import _gerar_clipping_async
 
-    async def _falha_busca(keywords: list):
+    async def _falha_busca(keywords: list, **kwargs):
         raise AssertionError("não deveria buscar com janela inválida")
 
     monkeypatch.setattr("servicos.exportador_local._buscar_camara", _falha_busca)
@@ -147,7 +147,7 @@ def test_gerar_clipping_aplica_janela_de_data(monkeypatch):
 
     from servicos.exportador_local import _gerar_clipping_async
 
-    async def _camara_fake(keywords: list):
+    async def _camara_fake(keywords: list, **kwargs):
         return CAMARA_ITENS
 
     async def _senado_fake(keywords: list):
