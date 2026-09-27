@@ -1,0 +1,76 @@
+name: testes
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  suite:
+    name: suite de testes (py${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 e o piso suportado aqui; 3.13 e o que roda em producao.
+        # A matriz pega regressao de API entre as duas.
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instala o Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Instala as dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      # Invariante forte do projeto (AGENTS.md): a suite roda com ZERO rede.
+      # Se um teste tentar sair para a internet, ele falha em vez de gastar
+      # rate limit das APIs do governo. O CI nao tem segredos nem services.
+      # Roda da raiz do repositorio, identico ao uso local (pytest.ini tem
+      # testpaths=tests), para o CI nunca divergir do desenvolvimento.
+      - name: Roda a suite
+        run: pytest -q --cov=backend --cov-report=term-missing --cov-report=xml:coverage.xml
+
+      # Segunda passada com semente fixa e diferente da primeira: a suite nao
+      # pode depender da ordem de execucao. Foi a aleatorizacao que revelou o
+      # vazamento de estado do SQLite entre os testes do hub.
+      - name: Roda a suite em outra ordem
+        run: pytest -q --randomly-seed=2026
+
+      - name: Publica o relatorio de cobertura
+        if: matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-relmeg
+          path: coverage.xml
+          if-no-files-found: warn
+
+  contrato:
+    name: guardas de arquitetura (AGENTS.md)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # Nao exige as dependencias do backend: o verificador le so o codigo-fonte.
+      # Cobre: BackgroundTask fora da excecao autorizada, chave "crons" em
+      # vercel.json, setInterval/while True infinito e entrega fora da pasta
+      # canonica. A propria suite de testes cobre os casos negativos.
+      - name: Verifica os contratos do AGENTS.md
+        run: python scripts/verificar_contrato.py
+
+      - name: Confere que as guardas seguem verdes
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+          pytest tests/test_contrato_arquitetura.py -q

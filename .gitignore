@@ -11,3 +11,23 @@ backend/data/
 # Logs gerados pelo loguru (observabilidade local)
 backend/logs/
 *.log
+
+# Entregas ao cliente (AGENTS.md: ~/Desktop/RelMeg - Entregas/ é a pasta
+# canônica, FORA do repositório). Qualquer cópia dentro do repo é acidental e
+# nunca deve ser versionada — contém dados de cliente e de candidatos.
+RelMeg - Entregas/
+/RelMeg - Entregas/
+
+# Artefatos de coleta do DOU gravados por scripts na raiz do backend/
+backend/dou_*.json
+backend/resumos_dou_*.json
+
+# Banco temporário deixado por testes
+tests/*.sqlite
+tests/*.db
+.pytest_cache/
+
+# Relatórios de cobertura gerados pelo CI
+coverage.xml
+.coverage
+htmlcov/

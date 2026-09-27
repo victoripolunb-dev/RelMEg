@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Recoleta o DOU de 2026-09-15 restrito à Seção 1 (s=do1) — sob demanda.
+"""Recoleta o DOU de 2026-09-15 (seções 1, 2 e 3) — sob demanda.
 
 Mesmos termos da metodologia original; paginação via cursor do portal;
 respeito ao rate limit (intervalo >= 6,5s entre requisições ao portal).
+
+Entrega gravada em <dir_entregas>/Relatórios/DOU (AGENTS.md: nunca na raiz do
+repositório). Para o fluxo genérico por cliente/tema, use ``monitorar_dou.py``.
 """
 import json
 import time
-from pathlib import Path
 
-from routers.dou import _coletar_portal
+from config import settings
+from relmeg_core.connectors.dou import coletar_portal_sr
 
 DATA = "2026-09-15"
 SECOES = (1, 2, 3)
@@ -25,10 +28,9 @@ TERMOS = [
     "gás natural", "petróleo", "combustíveis", "usina", "transmissão elétrica",
 ]
 
-SAIDA = Path(__file__).parent / f"dou_energia_{DATA}_secao{1}.json"
-
-
-SAIDA = Path(__file__).parent / f"dou_energia_{DATA}_com_secao.json"
+# Entrega canônica (AGENTS.md): <dir_entregas>/Relatórios/DOU.
+DIR_ENTREGA = settings.dir_relatorios / "DOU"
+SAIDA = DIR_ENTREGA / f"dou_energia_{DATA}_com_secao.json"
 
 
 def main():
@@ -38,7 +40,9 @@ def main():
         print(f"--- SEÇÃO {secao} ---")
         for q in TERMOS:
             inicio = time.time()
-            resultados = _coletar_portal(q, secao, DATA, limite=LIMITE_POR_TERMO)
+            resultados = coletar_portal_sr(
+                q, secao=secao, data=DATA, itens=LIMITE_POR_TERMO
+            )
             novos = 0
             for r in resultados:
                 u = r.get("url") or ""
@@ -54,6 +58,7 @@ def main():
                 time.sleep(INTERVALO - decorrido)
 
     coletados = (por_secao[1] + por_secao[2] + por_secao[3])
+    DIR_ENTREGA.mkdir(parents=True, exist_ok=True)
     SAIDA.write_text(json.dumps(coletados, ensure_ascii=False, indent=2),
                      encoding="utf-8")
     print(f"\nSalvo: {SAIDA} ({len(coletados)} itens únicos — "

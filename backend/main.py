@@ -1,6 +1,7 @@
 import hmac
 import logging
 import re
+import secrets
 import sys
 from contextlib import asynccontextmanager
 
@@ -91,12 +92,69 @@ def _configurar_loguru() -> None:
         logging.getLogger(_nome).handlers = [_InterceptHandler()]
 
 
+def _resolver_chave_efetiva() -> tuple[str, bool]:
+    """Resolve a chave X-API-Key efetiva e se a autenticação deve ser exigida.
+
+    Fail-closed por padrão (ver a tríade de estados em ``config.py``):
+
+    - ``relmeg_api_key`` preenchida -> usa a chave, auth OBRIGATÓRIA;
+    - ``relmeg_api_key == ""``       -> vazio explícito: modo dev sem auth, mas
+      só é aceito com ``relmeg_requer_api_key=False``; caso contrário ABORTA;
+    - ``relmeg_api_key is None``    -> nunca configurada: GERA uma chave
+      aleatória efêmera por processo. Um deploy sem ``.env`` sobe protegido em
+      vez de expor a API inteira; o operador lê a chave no log do startup.
+
+    Retorna ``(chave_efetiva, auth_ativa)``.
+    """
+    bruta = settings.relmeg_api_key
+
+    if bruta is None:  # nunca configurada -> chave efêmera
+        if settings.relmeg_requer_api_key:
+            chave = secrets.token_urlsafe(32)
+            logger.warning(
+                "RELMEG_API_KEY NÃO definida — foi gerada uma chave ALEATÓRIA "
+                "para este processo (ela morre com o servidor). "
+                "Defina RELMEG_API_KEY no .env para torná-la estável."
+            )
+            logger.info("Chave gerada (envie no header X-API-Key): {}", chave)
+            return chave, True
+        # Fail-closed desligado de propósito: roda aberto, com aviso máximo.
+        logger.warning(
+            "RELMEG_API_KEY não definida E RELMEG_REQUER_API_KEY=false — "
+            "API SEM AUTENTICAÇÃO por decisão explícita do operador. NÃO exponha "
+            "fora do localhost."
+        )
+        return "", False
+
+    if not bruta:  # vazio explícito
+        if settings.relmeg_requer_api_key:
+            logger.critical(
+                "FALHA FATAL NO STARTUP — RELMEG_API_KEY está vazia e "
+                "RELMEG_REQUER_API_KEY=true (padrão). Defina a chave em "
+                "backend/.env, ou declare RELMEG_REQUER_API_KEY=false para "
+                "assumir explicitamente o risco de rodar sem autenticação."
+            )
+            raise RuntimeError(
+                "Startup abortado: RELMEG_API_KEY vazia com "
+                "RELMEG_REQUER_API_KEY=true (fail-closed)."
+            )
+        logger.warning(
+            "RELMEG_API_KEY vazia (explícita) e RELMEG_REQUER_API_KEY=false — "
+            "API SEM AUTENTICAÇÃO. Apenas localhost/desenvolvimento."
+        )
+        return "", False
+
+    return bruta, True
+
+
 # Garante as pastas essenciais (entregas, cache, logs, templates) ANTES de
 # configurar o loguru para que o destino do log estruturado já exista — apenas
 # filesystem local, sem nenhuma consulta a API externa (conforme AGENTS.md).
 settings.garantir_diretorios()
 _configurar_loguru()
 logger.info("RelMeg API iniciando — observabilidade via loguru (nível {})", settings.log_level)
+
+CHAVE_EFETIVA, AUTH_ATIVA = _resolver_chave_efetiva()
 
 
 def _validar_dependencias_criticas() -> None:
@@ -121,15 +179,6 @@ def _validar_dependencias_criticas() -> None:
         raise RuntimeError(
             "Startup abortado: o template crítico está ausente. Restaure os "
             "arquivos em backend/templates/ e reinicie."
-        )
-    if settings.relmeg_requer_api_key and not settings.relmeg_api_key:
-        logger.critical(
-            "FALHA FATAL NO STARTUP — RELMEG_REQUER_API_KEY=true mas RELMEG_API_KEY "
-            "está vazia. Configure a chave em backend/.env antes de expor a API."
-        )
-        raise RuntimeError(
-            "Startup abortado: aplicação exige autenticação, mas a chave "
-            "RELMEG_API_KEY não foi definida."
         )
     if not contrato_disponivel():
         logger.warning(
@@ -156,18 +205,18 @@ app = FastAPI(
 )
 
 # ---------------------------------------------------------------------------
-# Segurança de superfície (X-API-Key) — opcional por env (RELMEG_API_KEY)
+# Segurança de superfície (X-API-Key) — fail-closed (ver _resolver_chave_efetiva)
 # ---------------------------------------------------------------------------
-# Se a chave estiver definida, TODAS as rotas (exceto infraestrutura) exigem o
-# header. Se vazia, a API permanece aberta com aviso claro — apta apenas para
-# ambiente localhost/desenvolvimento.
+# A chave efetiva já foi resolvida na montagem do módulo: nunca há janela em que
+# a API fique aberta por acidente. Se AUTH_ATIVA, TODAS as rotas (exceto
+# infraestrutura) exigem o header X-API-Key.
 #
 # /docs, /redoc e /openapi.json seguem a mesma regra por padrão (não expõem o
 # esquema da API sem chave). Para abri-los em ambiente controlado, defina
 # RELMEG_DOCS_PUBLICOS=true.
 
 _CAMINHOS_ISENTOS_API_KEY = {"/", "/favicon.ico", "/healthz"}
-if settings.relmeg_docs_publicos and settings.relmeg_api_key:
+if settings.relmeg_docs_publicos and AUTH_ATIVA:
     _CAMINHOS_ISENTOS_API_KEY |= {
         "/docs",
         "/redoc",
@@ -190,7 +239,7 @@ class _VerificarApiKey(BaseHTTPMiddleware):
             return await call_next(request)
         enviada = request.headers.get("X-API-Key") or ""
         # compare_digest: comparação em tempo constante (imune a timing attack).
-        if not enviada or not hmac.compare_digest(enviada, settings.relmeg_api_key):
+        if not enviada or not hmac.compare_digest(enviada, CHAVE_EFETIVA):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "API key ausente ou inválida. Envie o header X-API-Key."},
@@ -198,14 +247,9 @@ class _VerificarApiKey(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-if settings.relmeg_api_key:
+if AUTH_ATIVA:
     logger.info(
         "Autenticação X-API-Key ATIVA — todas as rotas exigem o header X-API-Key."
-    )
-else:
-    logger.warning(
-        "RELMEG_API_KEY não definida — API SEM AUTENTICAÇÃO. Configure-a em "
-        "backend/.env antes de expor a API fora do localhost."
     )
 
 # Rate limiting (slowapi): limite genérico para todas as rotas + limites
@@ -248,13 +292,46 @@ def _validar_cors(origens: list) -> None:
 _validar_cors(origens_padrao + origens_configuradas)
 allow_origins = [*origens_padrao, *origens_configuradas]
 
+class _TetoCorpo(BaseHTTPMiddleware):
+    """Rejeita 413 requisições cujo Content-Length exceda o teto global.
+
+    Atua na BORDA, antes do parser multipart: o Starlette spoula o corpo inteiro
+    em disco temporário antes de o endpoint rodar, então um teto aplicado só
+    dentro do handler (file.read()) já consumiu o disco. Rejeitar aqui devolve
+    413 sem nunca aceitar o corpo.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        bruto = request.headers.get("content-length")
+        if bruto:
+            try:
+                tamanho = int(bruto)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "Header Content-Length inválido."},
+                )
+            if tamanho > settings.corpo_max_bytes:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": (
+                            f"Corpo da requisição excede o limite de "
+                            f"{settings.corpo_max_bytes // (1024 * 1024)} MB."
+                        )
+                    },
+                )
+        return await call_next(request)
+
+
 # Ordem dos middlewares: Starlette empilha de trás para frente, então a CORS
 # é adicionada por último para ficar como a camada mais externa (respostas 429
 # e erros também recebem os cabeçalhos CORS corretos). A verificação de
 # API-Key fica IMEDIATAMENTE dentro da CORS: instala o 401 máxima cedo (não
 # consome rate-limit nem processamento) porém ainda exige o header real.
 app.add_middleware(SlowAPIMiddleware)
-if settings.relmeg_api_key:
+app.add_middleware(_TetoCorpo)
+if AUTH_ATIVA:
     app.add_middleware(_VerificarApiKey)
 app.add_middleware(
     CORSMiddleware,

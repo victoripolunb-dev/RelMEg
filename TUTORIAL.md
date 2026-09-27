@@ -39,7 +39,7 @@ processa e entrega.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Frontend (Vercel)  ──HTTP──>  FastAPI (backend/)                  │
+│  Operador (Postman/curl)  ──HTTP──>  FastAPI (backend/)            │
 │                                                              │      │
 │  ┌──────────────┐    ┌──────────────────────────────────────────┐   │
 │  │  main.py     │    │ routers/ (proposicoes, senado, tse, dou, │   │

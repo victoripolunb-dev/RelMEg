@@ -46,7 +46,7 @@ from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 
 from config import settings
-from routers.dou import _coletar_portal
+from relmeg_core.connectors.dou import coletar_portal_sr
 
 # ---------------------------------------------------------------------------
 # Parâmetros operacionais (mesmos do fluxo de energia)
@@ -134,7 +134,9 @@ def coletar(perfil: dict, data: str, secoes) -> list[dict]:
         print(f"--- SEÇÃO {secao} ({NOME_SECAO[secao]}) ---")
         for q in perfil["palavras_chave"]:
             inicio = time.time()
-            resultados = _coletar_portal(q, secao, data, limite=LIMITE_POR_TERMO)
+            resultados = coletar_portal_sr(
+                q, secao=secao, data=data, itens=LIMITE_POR_TERMO
+            )
             novos = 0
             for r in resultados:
                 u = r.get("url") or ""

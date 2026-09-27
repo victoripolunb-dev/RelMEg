@@ -81,6 +81,22 @@ def _sanitizar(nome: str) -> str:
     return re.sub(r'[\\/:*?"<>|]', "_", nome).replace(" ", "_")
 
 
+def _dentro_de(pasta: Path, nome: str) -> Path:
+    """Resolve ``pasta/nome`` e garante que o resultado fique dentro de ``pasta``.
+
+    Defesa em profundidade contra path traversal: mesmo com nome já sanitizado,
+    um valor inesperado (ex.: ``..`` puro, caminho absoluto) é rejeitado em vez
+    de gravar fora da pasta de entregas.
+    """
+    raiz = pasta.resolve()
+    destino = (raiz / nome).resolve()
+    if destino != raiz and raiz not in destino.parents:
+        raise FichaLegislativaError(
+            f"Nome de arquivo fora da pasta de entregas: {nome!r}"
+        )
+    return destino
+
+
 def _link_publico(projeto: Dict[str, Any]) -> Optional[str]:
     """URL pública de referência da proposição, conforme a fonte."""
     fonte = (projeto.get("fonte") or "").strip().lower()
@@ -307,10 +323,10 @@ def gerar_ficha_parlamentar(parlamentar: Any) -> Dict[str, Any]:
 
     nome = str(dados.get("nome_completo") or "Parlamentar").strip().upper()
     nome = re.sub(r"[^A-Z0-9À-ÜÇÃÕÉÁÍÓÚÊÂÔ]+", "_", nome).strip("_") or "Parlamentar"
-    fonte = str(dados.get("fonte") or "fonte").lower()
+    fonte = _sanitizar(str(dados.get("fonte") or "fonte")).lower().strip("_") or "fonte"
     data = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     arquivo = f"Ficha_Parlamentar_{nome}_{fonte}_{data}.docx"
-    destino = pasta / arquivo
+    destino = _dentro_de(pasta, arquivo)
 
     doc = Document()
     doc.core_properties.title = f"Ficha de Parlamentar — {dados.get('nome_completo')}"
@@ -347,14 +363,17 @@ def gerar_ficha(projeto: Any, tramitacoes: Any, *, nome_extra: str = "") -> Dict
             f"Não foi possível criar a pasta de entregas: {pasta}"
         ) from exc
 
-    sigla = str(dados_projeto.get("sigla_tipo") or "PL").upper()
-    numero = str(dados_projeto.get("numero") or 0)
-    ano = str(dados_projeto.get("ano") or 0)
-    fonte = str(dados_projeto.get("fonte") or "proposicao").lower()
+    # sigla/numero/ano/fonte vêm de APIs externas e do repositório local: TODOS
+    # precisam de sanitização antes de compor o nome do arquivo (um "../" ou
+    # separador de path escaparia de settings.dir_relatorios).
+    sigla = _sanitizar(str(dados_projeto.get("sigla_tipo") or "PL")).upper().strip("_") or "PL"
+    numero = _sanitizar(str(dados_projeto.get("numero") or 0)).strip("_") or "0"
+    ano = _sanitizar(str(dados_projeto.get("ano") or 0)).strip("_") or "0"
+    fonte = _sanitizar(str(dados_projeto.get("fonte") or "proposicao")).lower().strip("_") or "proposicao"
     data = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     extra = f"_{_sanitizar(nome_extra)}" if nome_extra else ""
     nome = f"Ficha_Legislativa_{sigla}_{numero}_{ano}_{fonte}_{data}{extra}.docx"
-    destino = pasta / nome
+    destino = _dentro_de(pasta, nome)
 
     doc = Document()
     doc.core_properties.title = f"Ficha Legislativa {sigla} {numero}/{ano}"

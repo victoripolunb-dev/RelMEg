@@ -1,4 +1,11 @@
 # Dependências de DESENVOLVIMENTO apenas (nunca instalar em produção).
 # Instalação:
 #   pip install -r requirements.txt -r requirements-dev.txt
--P pytest==9.1.1
+pytest==9.1.1
+# Medição de cobertura usada no CI e nas revisões periódicas:
+#   pytest --cov=backend --cov-report=term-missing
+pytest-cov==7.1.0
+# Aleatoriza a ordem dos testes a cada execução (--randomly-seed=N). Foi ele que
+# expôs o vazamento de estado do SQLite entre testes do hub; sem ele a suíte
+# passa em ordem alfabética e esconde a dependência de ordem.
+pytest-randomly==5.0.0

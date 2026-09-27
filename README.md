@@ -254,16 +254,26 @@ Aprovada em 07/09/2026 pelo operador, com requisitos rígidos:
 |----------|--------|-----------|
 | `RELMEG_API_KEY` | vazio | Chave `X-API-Key`. Se preenchida, todas as rotas exigem o header. |
 | `RELMEG_REQUER_API_KEY` | `false` | Se `true` com chave vazia, o startup ABORTA (fail-fast). |
+| `RELMEG_DOCS_PUBLICOS` | `false` | Se `true`, `/docs`, `/redoc` e `/openapi.json` ficam abertos mesmo com a chave ativa. |
 | `CONFIAR_XFF` | `false` | `true` apenas atrás de reverse-proxy controlado. |
 | `USA_SCRAPLING` | `true` | Fallback por raspagem (Scrapling) quando a API oficial falha. |
 | `SCRAPLING_TIMEOUT_MS` | `45000` | Tolerância do browser headless nas raspagens. |
-| `RELMEG_DIR_ENTREGAS` | `~/Desktop/RelMeg - Entregas` | Pasta única de entregas ao cliente. |
+| `DIR_ENTREGAS` | `~/Desktop/RelMeg - Entregas` | Pasta única de entregas ao cliente. |
 | `RELMEG_CACHE_DB` | `backend/data/relmeg_cache.db` | Banco SQLite (cache + auditoria + motor). |
-| `RELMEG_LOG_LEVEL` | `INFO` | Nível do loguru. |
+| `LOG_LEVEL` | `INFO` | Nível do loguru. |
 | `TSE_ID_ELEICAO_2026` | `20322002026` | id_eleicao para 2026 (**confirmado em 16/09/2026**). |
 | `TSE_BASE_URL` | `https://divulgacandcontas.tse.jus.br/divulga/rest/v1` | Base da API do TSE. |
 | `TSE_CACHE_TTL` | `86400` | Validade do cache local (segundos; 0 desativa). |
 | `HTTP_TIMEOUT`, `HTTP_MAX_TENTATIVAS`, `TSE_MAX_CONCORRENCIA` etc. | ver `config.py` | Retry/backoff/concorrência. |
+
+> **Atenção ao nome das variáveis:** `Configuracoes` (`backend/config.py`) **não
+> usa `env_prefix`** — o nome da variável de ambiente é o do atributo em
+> `MAIÚSCULAS`. Por isso a pasta de entregas é `DIR_ENTREGAS` (não
+> `RELMEG_DIR_ENTREGAS`) e o log é `LOG_LEVEL` (não `RELMEG_LOG_LEVEL`).
+> Os campos que já começam com `relmeg_` (`RELMEG_API_KEY`, `RELMEG_CACHE_DB`,
+> `RELMEG_REQUER_API_KEY`, `RELMEG_DOCS_PUBLICOS`, `RELMEG_CORS_ORIGINS_EXTRA`)
+> mantêm o prefixo por coincidência do próprio nome do atributo. A lista acima é
+> espelhada em `.env.example`.
 
 ---
 

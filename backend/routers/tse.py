@@ -240,7 +240,7 @@ async def listar_candidatos(
     ano: int = Query(..., description="Ano eleitoral: 2020, 2022 ou 2024", ge=2018, le=2100),
     uf: str = Query(..., min_length=2, max_length=2, description="Sigla da UF (2 letras) ou BR apenas para cargos nacionais"),
     codigo_cargo: int = Query(..., ge=1, le=13, description="Código do cargo (1, 3, 5, 6, 7, 11, 12, 13)"),
-    municipio: Optional[str] = Query(None, max_length=12, description="Código do município (obrigatório nas eleições municipais, ex: 71072)"),
+    municipio: Optional[str] = Query(None, pattern=r"^\d{1,7}$", description="Código do município (obrigatório nas eleições municipais, ex: 71072) — apenas dígitos"),
     q: Optional[str] = Query(None, max_length=120, description="Termo livre para filtrar por nome de urna, nome completo, CPF/CNPJ, número ou partido"),
     partido: Optional[str] = Query(None, max_length=20, description="Sigla do partido (ex: PL) para filtrar candidaturas"),
     situacao: Optional[str] = Query(None, max_length=40, description="Status da candidatura (ex: deferido, indeferido, sub judice)"),
@@ -309,7 +309,7 @@ async def detalhe_candidato(
     ano: int = Path(..., ge=2018, le=2100),
     uf: str = Path(..., min_length=2, max_length=2),
     id_candidato: int = Path(..., ge=1),
-    municipio: Optional[str] = Query(None, max_length=12, description="Código do município (obrigatório nas eleições municipais, ex: 71072)"),
+    municipio: Optional[str] = Query(None, pattern=r"^\d{1,7}$", description="Código do município (obrigatório nas eleições municipais, ex: 71072) — apenas dígitos"),
 ):
     """Detalha um candidato, incluindo dados pessoais, eleição e patrimônio declarado."""
     id_eleicao = _id_eleicao(ano)

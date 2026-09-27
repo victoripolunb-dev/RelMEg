@@ -61,8 +61,11 @@ com requisitos rígidos:
   registrada APENAS dentro da rota `/tse/exportar/{ano}/{uf}/{codigo_cargo}`
   (o próprio trigger on-demand) e retorna 202 + `task_id`, com status em
   `GET /tse/execucoes/{task_id}` e log de etapas persistido em `backend/database.py`.
-- A tarefa registrada deve baixar o payload inicial no próprio handler, e a
-  varredura de enriquecimento não reutiliza caches após a falha da primeira
+- O download do payload inicial e a varredura de enriquecimento ocorrem
+  **inteiramente dentro da `BackgroundTask`**, disparada só pela requisição do
+  operador. O handler apenas valida filtros, faz o check de concorrência
+  (409), registra a execução e devolve 202 — ele não chama o TSE. A
+  varredura de enriquecimento não reutiliza cache após a falha da primeira
   chamada — sempre passando pelo cache SQLite local.
 - **Nunca** agendar, cron, startup/lifespan, dispatcher automático ou polling
   de fila. O worker é inerte sem a requisição do operador.
@@ -84,7 +87,7 @@ revisão e aprovação explícita deste documento.
 - **Formato padrão Word (.docx)** para relatórios e clippings — gerar com
   python-docx reutilizando a identidade da casa (fonte Montserrat, texto
   `333333`, links de destaque em negrito vermelho `ff0000`, como em
-  `backend/exportador_local.py`). Arquivos de apoio (JSON/Excel) podem
+  `backend/servicos/exportador_local.py`). Arquivos de apoio (JSON/Excel) podem
   acompanhar o .docx na mesma subpasta.
 - Validação: o template `MODELO A SER SEGUIDO.docx` não deve ser sobrescrito;
   sempre clonar/gemar a partir dele quando aplicável (`exportador_local.py`).

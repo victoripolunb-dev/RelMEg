@@ -52,6 +52,29 @@ async def _ler_com_limite(file: UploadFile, limite: int) -> bytes:
     return conteudo
 
 
+def _tem_doctype(conteudo: bytes) -> bool:
+    """Detecta ``<!DOCTYPE`` nas partes XML internas de um .xlsx.
+
+    O teto de tamanho descomprimido (512 MB) protege contra zip-bomb, mas NAO
+    contra expansao de entidades XML (billion laughs): um .xlsx de poucos MB com
+    ``<!DOCTYPE`` e entidades internas aninhadas expande em memoria muito alem do
+    teto. ``.xlsx`` legitimo (openpyxl, Excel, LibreOffice) nunca declara DOCTYPE,
+    entao rejeitar e seguro e fecha o vetor mesmo sem o ``defusedxml`` instalado.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(conteudo)) as zf:
+            for info in zf.infolist():
+                if not info.filename.lower().endswith((".xml", ".rels")):
+                    continue
+                with zf.open(info) as parte:
+                    # Só o cabeçalho importa: o DOCTYPE vem antes da raiz.
+                    if b"<!DOCTYPE" in parte.read(65536).upper():
+                        return True
+    except (zipfile.BadZipFile, RuntimeError, OSError):
+        return False
+    return False
+
+
 def _ler_xlsx(conteudo: bytes) -> List[Dict[str, Any]]:
     try:
         import openpyxl
@@ -74,6 +97,14 @@ def _ler_xlsx(conteudo: bytes) -> List[Dict[str, Any]]:
         raise HTTPException(
             status_code=413,
             detail="Planilha .xlsx descomprime além do limite suportado pelo backend.",
+        )
+    if _tem_doctype(conteudo):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Arquivo .xlsx rejeitado: declara entidades XML (<!DOCTYPE>), "
+                "técnica de expansão recursiva que o backend não processa."
+            ),
         )
 
     try:

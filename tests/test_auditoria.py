@@ -35,11 +35,18 @@ def test_resumo_metricas_tse():
 
 
 def test_historico_inclui_caminho_arquivo_e_etapas():
+    # Autossuficiente: cria a própria execução em vez de depender do teste
+    # anterior (o conftest limpa tse_execucoes entre testes).
+    database.criar_execucao_tse("audit-historico", 2026, "GO", 7)
+    database.atualizar_execucao_tse(
+        "audit-historico", status="Concluído", total_candidatos=7,
+        caminho_arquivo="C:/entregas/TSE/GO-2026-historico.xlsx",
+    )
     registros = database.historico_execucoes_tse(20)
     assert registros
-    alvo = next((r for r in registros if r["task_id"] == "audit-1"), None)
+    alvo = next((r for r in registros if r["task_id"] == "audit-historico"), None)
     assert alvo is not None
-    assert alvo["caminho_arquivo"] == "C:/entregas/TSE/GO-2026.xlsx"
+    assert alvo["caminho_arquivo"] == "C:/entregas/TSE/GO-2026-historico.xlsx"
     assert isinstance(alvo.get("etapas"), list)
     assert alvo["status"] in ("Concluído", "Falhou")
 

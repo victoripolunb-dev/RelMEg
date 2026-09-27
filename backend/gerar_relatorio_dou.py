@@ -14,16 +14,31 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 
+from config import settings
+
 DATA = "2026-09-15"
 DATA_DISPLAY = "15/09/2026"
 
-BASE = Path(__file__).parent
-FONTE_JSON = BASE / f"dou_energia_{DATA}_com_secao.json"
-FONTE_RESUMOS = BASE / f"resumos_dou_{DATA}.json"
+# Entradas: ficam ao lado do relatório, na pasta de entregas (AGENTS.md) — nunca
+# na raiz do repositório. Toleradas no backend/ apenas para compatibilidade com
+# coletas antigas, mas o destino canônico é DIR_ENTREGA.
+DIR_ENTREGA = settings.dir_relatorios / "DOU"
+
+
+def _resolver_entrada(nome: str) -> Path:
+    """Localiza um arquivo de apoio: pasta de entregas 1º, backend/ como legado."""
+    na_entrega = DIR_ENTREGA / nome
+    if na_entrega.exists():
+        return na_entrega
+    legado = Path(__file__).parent / nome
+    return legado if legado.exists() else na_entrega
+
+
+FONTE_JSON = _resolver_entrada(f"dou_energia_{DATA}_com_secao.json")
+FONTE_RESUMOS = _resolver_entrada(f"resumos_dou_{DATA}.json")
 # "Conteúdo:" usa resumo analítico quando existir; ementas curtas ficam na íntegra
 LIMITE_EMENTA_INTEGRA = 240
 LIMITE_EMENTA_TRUNCADA = 300
-DIR_ENTREGA = Path(r"C:\Users\Victor\Desktop\RelMeg - Entregas\Relatórios\DOU")
 ARQUIVO_SAIDA = Path(os.environ.get("RELMEG_SAIDA",
                      str(DIR_ENTREGA / f"relatorio_dou_energia_{DATA}.docx")))
 

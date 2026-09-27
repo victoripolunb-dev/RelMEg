@@ -141,7 +141,7 @@ def test_janela_inversa_gera_erro(monkeypatch):
         assert "data_fim anterior" in str(exc).lower()
 
 
-def test_gerar_clipping_aplica_janela_de_data(monkeypatch):
+def test_gerar_clipping_aplica_janela_de_data(monkeypatch, tmp_path):
     """A janela de datas é aplicada na busca real, antes do Family Talks."""
     from datetime import date
 
@@ -172,7 +172,8 @@ def test_gerar_clipping_aplica_janela_de_data(monkeypatch):
 
     def _pasta_entregas_fake(*args, **kwargs):
         from pathlib import Path
-        pasta = Path("C:/entregas")
+        # tmp_path do pytest: nunca criar pastas na raiz do disco (C:/entregas).
+        pasta = Path(tmp_path) / "entregas"
         pasta.mkdir(parents=True, exist_ok=True)
         return pasta
 

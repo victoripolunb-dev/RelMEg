@@ -5,15 +5,11 @@ Valida o contrato do motor: resolue fonte → coleta → persiste atomicamente n
 base relmeg → audita, tudo sob demanda (sem agendamento).
 """
 import asyncio
-import os
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-# Banco isolado para o teste — precisa ser definido antes do import de config.
-os.environ["RELMEG_CACHE_DB"] = str(
-    Path(__file__).parent / "tmp_test_orquestrador.sqlite"
-)
-
+# Sem override de RELMEG_CACHE_DB aqui: o conftest.py já aponta o cache para um
+# tempdir ANTES de qualquer import. Mutar os.environ no import deste módulo
+# desfazia o isolamento caso ele seja importado antes do config.py.
 import database as _db  # noqa: E402  (módulo-irmão do backend, no sys.path)
 from relmeg_core.connectors.camara import CamaraConnector  # noqa: E402
 from relmeg_core.orquestrador import OrquestradorLegislativo  # noqa: E402

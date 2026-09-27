@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -83,17 +83,34 @@ class Configuracoes(BaseSettings):
     # ------------------------------------------------------------------
     # Segurança de superfície (X-API-Key via header)
     # ------------------------------------------------------------------
-    # Se definida (env RELMEG_API_KEY), TODAS as rotas exigem o header
-    # "X-API-Key". Se vazia, a API roda apenas com aviso de segurança
-    # (destinada exclusivamente a ambiente localhost/desenvolvimento).
-    relmeg_api_key: str = ""
-    # Quando RELMEG_REQUER_API_KEY=true e a chave estiver vazia, o startup
-    # ABORTA (fail-fast) em vez de subir a API exposta sem autenticação.
-    relmeg_requer_api_key: bool = False
+    # Tríade de estados (fail-closed por padrão):
+    #
+    #   None  -> NUNCA foi configurada. main.py GERA uma chave aleatória
+    #            efêmera por processo: a API sobe protegida e o operador lê a
+    #            chave no log. É o estado de um deploy sem .env — nunca
+    #            exposto por acidente.
+    #   ""    -> vazio EXPLÍCITO (RELMEG_API_KEY= no .env). Modo dev sem
+    #            autenticação, com aviso alto no log. Precisa ser uma escolha.
+    #   "xyz" -> chave real: todas as rotas exigem o header X-API-Key.
+    relmeg_api_key: Optional[str] = None
+    # Quando True (padrão) e a chave não pode ser resolvida, o startup ABORTA
+    # (fail-fast) em vez de subir a API exposta. Defina False apenas quando o
+    # operador assumir explicitamente o risco de rodar sem chave.
+    relmeg_requer_api_key: bool = True
     # Define se /docs, /redoc, /openapi.json ficam ABERTOS (públicos) mesmo com
     # a API key ativa. Padrão False = documentação protegida junto com as rotas.
     # Em ambiente localhost de desenvolvimento, abra com RELMEG_DOCS_PUBLICOS=true.
     relmeg_docs_publicos: bool = False
+
+    # ------------------------------------------------------------------
+    # Teto de corpo de requisição
+    # ------------------------------------------------------------------
+    # O parser multipart do Starlette spoula o corpo INTEIRO em disco ANTES do
+    # handler rodar: um teto aplicado só dentro do endpoint (file.read()) chega
+    # tarde demais. Este teto é conferido por middleware, na borda, e devolve 413
+    # sem nunca aceitar o corpo. 25 MB dá folga para o upload de 10 MB
+    # documentado em routers/planilha.py mais o overhead de multipart.
+    corpo_max_bytes: int = 25 * 1024 * 1024
 
     # ------------------------------------------------------------------
     # Rate limit — confiança no cabeçalho X-Forwarded-For
