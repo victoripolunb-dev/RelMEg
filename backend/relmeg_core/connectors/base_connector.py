@@ -1,7 +1,7 @@
 """
 Interface base dos conectores legislativos (Padrão Adapter).
 
-Todo conector (Câmara, Senado, CLDF, ALGO, DOU...) herda de
+Todo conector (Câmara, Senado, DOU...) herda de
 ``LegislativoConnector`` e traduz os dados da sua fonte — JSON oficial ou HTML
 raspado — para os Modelos Pydantic de ``relmeg_core.models.schemas``. O resto
 do sistema nunca vê o formato da fonte, apenas o modelo normalizado.
@@ -89,8 +89,8 @@ def _data_br(valor: Any) -> Optional[date]:
 def extrair_linha_tempo(texto: str, marcador: str = "andamento") -> List[tuple]:
     """Extrai pares ``(data_br, descrição)`` de um texto de linha do tempo.
 
-    Heurística tolerante a markup, usada nos fallbacks de raspagem (CLDF e
-    Senado) quando a fonte renderiza o histórico via JS: localiza o trecho a
+    Heurística tolerante a markup, usada nos fallbacks de raspagem (Senado)
+    quando a fonte renderiza o histórico via JS: localiza o trecho a
     partir de ``marcador`` e quebra os passos pelos padrões de data dd/mm/aaaa,
     tomando como descrição o texto até a próxima data.
     """
@@ -114,7 +114,7 @@ class LegislativoConnector(ABC):
     """Classe abstrata herdada por todos os conectores do RelMeg.
 
     Atributos de classe que cada conector deve sobreescrever:
-        - ``fonte``:  identificador canônico ("camara", "senado", "cldf", "algo"...);
+        - ``fonte``:  identificador canônico ("camara", "senado", "dou"...);
         - ``url_raiz``: base pública da fonte (usada para montar URLs).
     """
 

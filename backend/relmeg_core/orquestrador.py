@@ -19,11 +19,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from loguru import logger
 
 from relmeg_core.connectors import (
-    AlespConnector,
-    AlgoConnector,
-    AlmgConnector,
     CamaraConnector,
-    CldfConnector,
     DouConnector,
     FonteSemApiPublica,
     LegislativoConnector,
@@ -33,14 +29,12 @@ from relmeg_core.models.schemas import ParlamentarModel, ProjetoDeLeiModel, Tram
 from relmeg_core.utils.helpers import modulo_database
 
 # Fonte canônica → classe conectora. Adicionar novas fontes = registrar aqui.
+# Escopo federal (decisão do operador em 01/10/2026): as ALEs — CLDF, ALGO,
+# ALMG e ALESP — saíram da plataforma e não são monitoradas.
 REGISTRO_CONECTORES: Dict[str, type] = {
     "camara": CamaraConnector,
     "senado": SenadoConnector,
-    "cldf": CldfConnector,
     "dou": DouConnector,
-    "algo": AlgoConnector,
-    "almg": AlmgConnector,
-    "alesp": AlespConnector,
 }
 
 
@@ -94,7 +88,7 @@ class OrquestradorLegislativo:
         try:
             parlamentar = await conn.obter_parlamentar(id_externo, campos=campos)
         except FonteSemApiPublica:
-            logger.warning("orquestrador: fonte {f} sem API (- {detalhe})", f=fonte, detalhe="ALGO")
+            logger.warning("orquestrador: fonte {f} sem API pública", f=fonte)
             raise
         if persisitir:
             modulo_database().salvar_parlamentar(parlamentar)
@@ -142,8 +136,8 @@ class OrquestradorLegislativo:
     ) -> Dict[str, Any]:
         """Projeto + tramitação numa requisição, persistidos atomicamente.
 
-        Em fontes sem histórico (CLDF), a tramitação pode vir vazia ou com o
-        estágio atual — o retorno é sempre um dicionário com os dois modelos.
+        O retorno é sempre um dicionário com os dois modelos; a tramitação pode
+        vir vazia se a fonte não expõe histórico.
         """
         fonte = str(fonte).strip().lower()
         conn = self.conector(fonte)

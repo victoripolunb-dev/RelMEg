@@ -63,8 +63,8 @@ def test_linha_parlamentar_nome_fonte_sem_nome_vira_traco():
 
 
 def test_linha_parlamentar_casa_desconhecida_por_fonte():
-    linha = linha_parlamentar({"fonte": "algo", "nome_completo": "X"})
-    assert linha[0] == "ALGO"            # NOMES_CASA cobre as fontes canônicas
+    linha = linha_parlamentar({"fonte": "outra", "nome_completo": "X"})
+    assert linha[0] == "OUTRA"           # fonte fora do contrato vira o próprio rótulo
 
 
 def test_linha_parlamentar_alinhada_ao_contrato_se_mudar():
@@ -112,12 +112,12 @@ def test_bytes_planilha_coleta_xlsx_valido():
 def test_gravar_planilha_coleta_escreve_em_disco(tmp_path):
     destino = tmp_path / "coleta.xlsx"
     gravar_planilha_coleta(
-        [{"fonte": "cldf", "nome_completo": "DISTRITAL", "partido": "PSB", "uf": "DF"}],
+        [{"fonte": "camara", "nome_completo": "DEPUTADO FULANO", "partido": "PSD", "uf": "RJ"}],
         destino,
     )
     assert destino.exists() and destino.stat().st_size > 1000
     wb = openpyxl.load_workbook(str(destino))
-    assert wb["Candidatos"].cell(2, 2).value == "DISTRITAL"
+    assert wb["Candidatos"].cell(2, 2).value == "DEPUTADO FULANO"
 
 
 def test_nome_arquivo_coleta():
@@ -130,7 +130,9 @@ def test_nome_arquivo_coleta():
 # ---------------------------------------------------------------------------
 
 def test_nomes_casa_cobrem_fontes_registradas():
-    assert NOMES_CASA.keys() >= {"camara", "senado", "cldf"}
+    from relmeg_core.orquestrador import REGISTRO_CONECTORES
+
+    assert NOMES_CASA.keys() >= set(REGISTRO_CONECTORES)
 
 
 def test_contrato_operador_e_copia_interna_alinhados():

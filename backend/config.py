@@ -158,9 +158,9 @@ class Configuracoes(BaseSettings):
     # Fallback por raspagem (Scrapling) — estepe quando a API falha
     # ------------------------------------------------------------------
     # True (padrão): conectores tentam raspar a página pública da fonte quando
-    # a API oficial falha (403/503/timeout) ou devolve vazio, e a CLDF ganha o
-    # histórico de andamento (a API dela só expõe a etapa atual). USO sempre
-    # sob demanda (disparado por uma extração on-demand do operador — AGENTS.md).
+    # a API oficial falha (403/503/timeout) ou devolve vazio, e o Senado ganha o
+    # histórico de tramitação (a API oficial só expõe o estágio atual). USO
+    # sempre sob demanda (disparado por uma extração on-demand — AGENTS.md).
     # False: desliga o fallback em todos os conectores (rotas seguem 4xx/5xx).
     usa_scrapling: bool = True
     # Tolerância do browser headless do Scrapling (em MILISSEGUNDOS).
@@ -170,7 +170,7 @@ class Configuracoes(BaseSettings):
     # Camada HTTP universal do relmeg_core (conectores legislativos)
     # ------------------------------------------------------------------
     # Padrão de chamadas HTTP compartilhado por TODOS os conectores do motor
-    # (Câmara, Senado, CLDF, ALGO, DOU...). O retry aplica Exponential Backoff
+    # (Câmara, Senado, DOU...). O retry aplica Exponential Backoff
     # + Jitter sobre 403/429/5xx e erros de rede, como já é feito no TSE.
     http_timeout: float = 30.0
     http_max_tentativas: int = 3

@@ -133,7 +133,7 @@ _TABELA_EVENTOS = """CREATE TABLE IF NOT EXISTS auditoria_eventos (
 # Base legislativa normalizada (relmeg_core — hub universal de inteligência)
 # ---------------------------------------------------------------------------
 # Chave composta (fonte, id_externo): o banco nunca sabe a origem do dado, mas
-# sabe de ONDE ele veio (fonte canônica: "camara", "senado", "cldf", "algo"...).
+# sabe de ONDE ele veio (fonte canônica: "camara", "senado", "dou"...).
 # A ligação formal parlamentar <-> proposição fica para quando o BI pedir.
 
 _TABELA_PARLAMENTARES = """CREATE TABLE IF NOT EXISTS relmeg_parlamentares (

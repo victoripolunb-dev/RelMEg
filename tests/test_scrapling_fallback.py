@@ -5,9 +5,7 @@ Cobrem:
     - helpers ``_data_br`` e ``extrair_linha_tempo`` (heurística de timelines);
     - Câmara: API falha (HTTPError) ou vazia → ficha de tramitação raspada;
       marcas → devolve [] sem quebrar;
-    - Senado: API vazia → linha do tempo da página pública;
-    - CLDF: histórico do portal (browser headless) quando o fallback está ativo,
-      mantendo a etapa da API como retrato quando o portal não responde.
+    - Senado: API vazia → linha do tempo da página pública.
 
 Nenhum teste abre browser nem toca a rede: foram os conectores e o parâmetro
 ``_raspar`` (instância) são substituídos por fixtures simuladas.
@@ -15,27 +13,11 @@ Nenhum teste abre browser nem toca a rede: foram os conectores e o parâmetro
 import asyncio
 import httpx
 from datetime import date
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from relmeg_core.connectors import base_connector as bc
-from relmeg_core.connectors import cldf as cldf_mod
 from relmeg_core.connectors.camara import CamaraConnector
-from relmeg_core.connectors.cldf import CldfConnector
 from relmeg_core.connectors.senado import SenadoConnector
-
-FIXTURE_ITEM_CLDF = {
-    "id": 159224,
-    "tipoProposicao": "Projeto de Lei",
-    "siglaNumeroAno": "PL 2473/2026",
-    "ementa": "Dispõe sobre equidade de gênero nas equipes técnicas.",
-    "autoria": "Deputada Dayse Amarilio",
-    "etapa": "Apresentação",
-    "dataLeitura": "2026-09-10",
-    "ano": None,
-    "parecer": None,
-}
-
-FIXTURA_FILTER_CLDF = {"content": [FIXTURE_ITEM_CLDF]}
 
 
 # ---------------------------------------------------------------------------
@@ -64,20 +46,6 @@ def test_extrair_linha_tempo_quebra_passos_por_data():
 
 def test_extrair_linha_tempo_sem_datas_devolve_vazio():
     assert bc.extrair_linha_tempo("nenhuma data aqui") == []
-
-
-def _patched_com_scrapling(conector, coroutine):
-    """Executa ``coroutine`` forçando o guarde ``_scrapling_instalado`` para True.
-
-    A suíte não instala o Scrapling no venv de testes; os conectores decidem o
-    fallback com base nesse guard, então simulamos a presença do pacote nos
-    dois namespaces relevantes (base_connector e o namespace do conector CLDF).
-    """
-    with (
-        patch.object(bc, "_scrapling_instalado", return_value=True),
-        patch.object(cldf_mod, "_scrapling_instalado", return_value=True),
-    ):
-        return asyncio.run(coroutine)
 
 
 # ---------------------------------------------------------------------------
@@ -181,57 +149,6 @@ def test_senado_api_vazia_fallback_na_pagina():
     assert len(tramitacoes) == 2
     assert tramitacoes[0].data_evento == date(2026, 9, 1)
     assert "Comissão" in (tramitacoes[1].descricao_fase or "")
-
-
-# ---------------------------------------------------------------------------
-# CLDF — histórico do portal (B2)
-# ---------------------------------------------------------------------------
-
-def test_cldf_historico_do_portal_substitui_etapa():
-    conector = CldfConnector()
-    conector.usa_scrapling = True
-    conector._http_post_json = AsyncMock(
-        return_value=FIXTURA_FILTER_CLDF,
-    )
-    conector._raspar = AsyncMock(
-        return_value={
-            "texto": (
-                "Detalhamento do andamento (PLE) "
-                "05/09/2026 Em Plenário, primeira discussão. "
-                "10/09/2026 Comissão de Constituição e Justiça, parecer favorável. "
-                "12/09/2026 Incluído na Ordem do Dia."
-            )
-        }
-    )
-    tramitacoes = _patched_com_scrapling(conector, conector.obter_tramitacoes("PL 2473/2026"))
-    conector._http_post_json.assert_awaited_once()
-    conector._raspar.assert_awaited_once()
-    assert len(tramitacoes) == 3
-    assert tramitacoes[0].data_evento == date(2026, 9, 5)
-    assert tramitacoes[0].id_proposicao_externo == "PL 2473/2026"
-    assert "Ordem do Dia" in (tramitacoes[-1].descricao_fase or "")
-
-
-def test_cldf_portal_sem_dados_devolve_etapa_da_api():
-    conector = CldfConnector()
-    conector.usa_scrapling = True
-    conector._http_post_json = AsyncMock(return_value=FIXTURA_FILTER_CLDF)
-    conector._raspar = AsyncMock(return_value={})
-    tramitacoes = _patched_com_scrapling(conector, conector.obter_tramitacoes("PL 2473/2026"))
-    conector._raspar.assert_awaited_once()
-    assert len(tramitacoes) == 1
-    assert tramitacoes[0].status == "Apresentação"
-    assert tramitacoes[0].data_evento == date(2026, 9, 10)
-
-
-def test_cldf_fallback_desligado_mantem_etapa_sem_raspar():
-    conector = CldfConnector()
-    conector.usa_scrapling = False
-    conector._http_post_json = AsyncMock(return_value=FIXTURA_FILTER_CLDF)
-    with patch.object(bc, "_scrapling_instalado", return_value=True):
-        tramitacoes = asyncio.run(conector.obter_tramitacoes("PL 2473/2026"))
-    assert len(tramitacoes) == 1
-    assert tramitacoes[0].status == "Apresentação"
 
 
 # ---------------------------------------------------------------------------

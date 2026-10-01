@@ -94,47 +94,18 @@ def camara_mock(monkeypatch):
     return _mock_conector(monkeypatch, "camara", projeto, tramitacoes)
 
 
-@pytest.fixture()
-def cldf_mock(monkeypatch):
-    from datetime import date
-
-    projeto = ProjetoDeLeiModel(
-        fonte="cldf",
-        url_origem="https://ple.cl.df.gov.br/pleservico/api/public/proposicao/PL 2473/2026",
-        id_externo="PL 2473/2026",
-        sigla_tipo="PL",
-        numero=2473,
-        ano=2026,
-        ementa="Ementa de teste da CLDF.",
-        orgao_origem="cldf",
-        autor_principal="DISTRITAL FULANO",
-        situacao="Em tramitação",
-        comissao_atual=None,
-        relator=None,
-    )
-    tramitacoes = [
-        TramitacaoModel(
-            fonte="cldf",
-            url_origem="https://ple.cl.df.gov.br/pleservico/api/public/proposicao/PL 2473/2026",
-            id_proposicao_externo="PL 2473/2026",
-            data_evento=date(2026, 3, 2),
-            orgao_local="Plenário",
-            descricao_fase="Apresentação",
-            status="Apresentação",
-            sequencia=1,
-            despacho=None,
-        )
-    ]
-    return _mock_conector(monkeypatch, "cldf", projeto, tramitacoes)
-
-
 def test_status_fontes_sem_rede(client):
     resposta = client.get("/hub/fontes")
     assert resposta.status_code == 200
     dados = resposta.json()
     assert dados["camara"] == "pronta"
-    assert dados["algo"].startswith("indisponível")
-    assert set(dados) >= {"camara", "senado", "cldf", "algo"}
+    assert set(dados) == {"camara", "senado", "dou"}
+
+
+def test_fontes_estaduais_foram_removidas_do_registro(client):
+    """Escopo federal (decisão de 01/10/2026): nenhuma ALE é monitorada."""
+    dados = client.get("/hub/fontes").json()
+    assert set(dados) & {"cldf", "algo", "almg", "alesp"} == set()
 
 
 def test_disparo_sob_demanda_persiste_e_leitura(client, camara_mock):
@@ -164,27 +135,16 @@ def test_listar_proposicoes_salvas(client, camara_mock):
     assert any(p["sigla_tipo"] == "PL" for p in dados["proposicoes"])
 
 
-def test_id_com_barra_formato_cldf(client, cldf_mock):
-    resposta = client.post("/hub/proposicoes/cldf/PL 2473/2026")
-    assert resposta.status_code == 201
-    corpo = resposta.json()
-    assert corpo["projeto"]["ano"] == 2026
-
-    leitura = client.get("/hub/proposicoes/cldf/PL 2473/2026")
-    assert leitura.status_code == 200
-    assert leitura.json()["projeto"]["id_externo"] == "PL 2473/2026"
-
-
 def test_leitura_nao_coletada_retorna_404(client):
     resposta = client.get("/hub/proposicoes/senado/999999")
     assert resposta.status_code == 404
 
 
-def test_fonte_indisponivel_retorna_501(client):
-    resposta = client.post("/hub/proposicoes/algo/PL 1/2025")
-    assert resposta.status_code == 501
-    detalhe = resposta.json()["detail"].lower()
-    assert "algo" in detalhe and "api" in detalhe
+def test_fonte_estadual_removida_responde_400(client):
+    """CLDF/ALGO/ALMG/ALESP não são mais fontes conhecidas."""
+    resposta = client.post("/hub/proposicoes/cldf/PL%202473/2026")
+    assert resposta.status_code == 400
+    assert "cldf" in resposta.json()["detail"].lower()
 
 
 def test_fonte_desconhecida_retorna_400(client):
@@ -377,7 +337,7 @@ def test_busca_proposicoes_camara(client, monkeypatch):
 
 
 def test_busca_proposicoes_fonte_sem_api_publica_501(client):
-    resposta = client.get("/hub/busca/proposicoes?fonte=algo&termo=teste")
+    resposta = client.get("/hub/busca/proposicoes?fonte=senado&termo=teste")
     assert resposta.status_code == 501
 
 

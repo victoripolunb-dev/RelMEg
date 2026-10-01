@@ -12,7 +12,10 @@ from unittest.mock import AsyncMock, patch
 # desfazia o isolamento caso ele seja importado antes do config.py.
 import database as _db  # noqa: E402  (módulo-irmão do backend, no sys.path)
 from relmeg_core.connectors.camara import CamaraConnector  # noqa: E402
-from relmeg_core.orquestrador import OrquestradorLegislativo  # noqa: E402
+from relmeg_core.orquestrador import (  # noqa: E402
+    REGISTRO_CONECTORES,
+    OrquestradorLegislativo,
+)
 from relmeg_core.models.schemas import (  # noqa: E402
     ParlamentarModel,
     ProjetoDeLeiModel,
@@ -107,18 +110,19 @@ def test_fonte_desconhecida_erro_claro():
         assert "mingau" in str(exc)
 
 
-def test_algo_sinaliza_sem_api():
-    from relmeg_core.connectors.algo import FonteSemApiPublica
+def test_fontes_estaduais_nao_sao_registradas():
+    """Escopo federal (decisão de 01/10/2026): CLDF/ALGO/ALMG/ALESP saíram."""
+    orch = OrquestradorLegislativo()
+    assert set(REGISTRO_CONECTORES) == {"camara", "senado", "dou"}
 
     async def principal():
-        orch = OrquestradorLegislativo()
-        return await orch.coletar_projeto("algo", "PL 1/2025")
+        return await orch.coletar_projeto("cldf", "PL 2473/2026")
 
     try:
         asyncio.run(principal())
-        assert False, "esperava FonteSemApiPublica"
-    except FonteSemApiPublica:
-        pass
+        assert False, "esperava ValueError"
+    except ValueError as exc:
+        assert "cldf" in str(exc)
 
 
 def test_fontes_disponiveis_reflete_status():
@@ -126,5 +130,4 @@ def test_fontes_disponiveis_reflete_status():
     status = orch.fontes_disponiveis()
     assert status["camara"] == "pronta"
     assert status["senado"] == "pronta"
-    assert status["cldf"] == "pronta"
-    assert "indisponível" in status["algo"]
+    assert set(status) == {"camara", "senado", "dou"}

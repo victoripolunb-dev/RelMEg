@@ -172,7 +172,7 @@ def test_venv_nao_e_vasculhada(tmp_path):
     raiz = _arvore(
         tmp_path,
         {
-            ".venv/Lib/site-packages/algo/worker.py": "while True:\n    coletar()\n",
+            ".venv/Lib/site-packages/pacote/worker.py": "while True:\n    coletar()\n",
             "node_modules/pacote/index.js": "setInterval(poll, 1000);\n",
         },
     )

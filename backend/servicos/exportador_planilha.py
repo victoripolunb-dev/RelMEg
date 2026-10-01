@@ -25,11 +25,7 @@ from servicos.modelo_base import bytes_com_gabarito, gabarito_modelo, gravar_com
 NOMES_CASA = {
     "camara": "Câmara",
     "senado": "Senado",
-    "cldf": "CLDF",
     "dou": "DOU",
-    "algo": "ALGO",
-    "almg": "ALMG",
-    "alesp": "ALESP",
 }
 
 

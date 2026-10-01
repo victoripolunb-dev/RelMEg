@@ -1,9 +1,9 @@
 """
 relmeg_core — Motor de inteligência legislativa (V1).
 
-Hub universal de extração normalizada (Câmara, Senado, DOU e ALEs) que
-traduz qualquer fonte — JSON oficial ou HTML raspado — para os Modelos
-Pydantic definidos em ``relmeg_core.models.schemas``.
+Hub de extração normalizada (Câmara, Senado, DOU) que traduz qualquer fonte
+— JSON oficial ou HTML raspado — para os Modelos Pydantic definidos em
+``relmeg_core.models.schemas``.
 
 Princípios (alinhados ao AGENTS.md):
     - Execução estritamente sob demanda: nenhum conector é acionado sem um

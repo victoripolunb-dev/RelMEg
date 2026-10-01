@@ -4,8 +4,7 @@ Testes do conector DOU (relmeg_core) — B5, sem rede.
 Cobre: parsing do HTML embutido do portal (JSON no script _params), tratamento
 de encoding/mojibake, normalização de hits, delegação da rota legada para o
 motor, contrato do conector (busca sob demanda; coleta por item levanta
-DOUSemFichaEstruturada → 501) e o registro das novas fontes (dou, almg, alesp)
-no orquestrador com seus status.
+DOUSemFichaEstruturada → 501) e o registro da fonte no orquestrador.
 """
 import pytest
 
@@ -183,14 +182,12 @@ def test_obter_tramitacoes_levanta_501_mapeavel():
 # Registro e status (GUI /hub/fontes)
 # ---------------------------------------------------------------------------
 
-def test_fontes_novas_registradas_no_orquestrador():
+def test_fonte_dou_registrada_no_orquestrador():
     from relmeg_core.orquestrador import OrquestradorLegislativo
 
     status = OrquestradorLegislativo().fontes_disponiveis()
     assert status["dou"] == "pronta (busca)"
-    assert "API" in status["almg"] and "v2" in status["almg"]
-    assert "CSV" in status["alesp"]
-    assert "indisponível" in status["algo"]
+    assert set(status) == {"camara", "senado", "dou"}
 
 
 def test_fonte_dou_no_hub_devolve_501_para_coleta_por_item(monkeypatch):

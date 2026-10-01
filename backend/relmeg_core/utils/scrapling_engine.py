@@ -2,7 +2,7 @@
 Wrapper isolado do Scrapling — estepe de contingência do motor.
 
 Importado APENAS quando uma API oficial falha (403/503/timeout) ou quando o
-órgão não expõe API e exige raspagem (ex.: portais arcaicos de ALEs).
+órgão não expõe API e exige raspagem (ex.: páginas de tramitação em JS).
 
 Mantido 100% independente (stdlib + ``scrapling`` lazy) para que:
     - o pacote ``relmeg_core`` importe sem custo (sem pydantic/httpx aqui);

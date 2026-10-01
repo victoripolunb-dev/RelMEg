@@ -9,9 +9,9 @@
 
 O **RelMeg** é uma plataforma completa de monitoramento legislativo e inteligência de
 stakeholders. Ele **centraliza e consolida dados de múltiplas APIs públicas do governo
-federal e estadual** — Câmara dos Deputados, Senado Federal, TSE (DivulgaCandContas),
-DOU (Diário Oficial da União), CLDF, ALESP e ALMG — e os transforma em **relatórios
-acionáveis** para advocacy e acompanhamento de pautas familiares no Congresso Nacional.
+federal** — Câmara dos Deputados, Senado Federal, TSE (DivulgaCandContas) e DOU
+(Diário Oficial da União) — e os transforma em **relatórios acionáveis** para advocacy e
+acompanhamento de pautas familiares no Congresso Nacional.
 
 Atua como um **hub inteligente**: conecta fontes governamentais dispersas, aplica uma
 matriz de inteligência própria (Family Talks) para filtrar só o que interessa, e entrega
@@ -44,18 +44,22 @@ documentos prontos para consumo (Word, PDF, Excel e JSON).
 | **Câmara dos Deputados** | Deputados, proposições, eventos, autores, frentes parlamentares, busca por palavras-chave, varredura por janela de datas e status legislativo |
 | **Senado Federal** | Matérias legislativas, comissões, relatórios e pareceres |
 | **TSE (DivulgaCandContas)** | Candidatos (2018–2026), enriquecimento por candidato e **detalhe rico**: perfil, bens individuais + agregados, propostas e redes sociais |
-| **CLDF** | Proposições do PLE (DF) via API pública; **histórico de tramitação** via raspagem (a API só expõe a etapa atual) |
+
 | **DOU (Diário Oficial da União)** | Publicações por palavra-chave, data, ano e seção |
-| **ALGO** | Esqueleto registrado (fonte reconhecida; responde 501 na V1) |
-| **ALMG / ALESP** | Registradas; mapeamento futuro (CLDF é o piloto ALE) |
+
+> **Escopo de fontes (decisão do operador em 01/10/2026)**: apenas a esfera
+> federal é monitorada. As assembléias estaduais — **CLDF, ALGO, ALMG e ALESP** —
+> foram removidas da plataforma (conectores e registros deletados). Para
+> reintroduzir uma, vale o contrato do Adapter: novo conector + uma entrada em
+> `REGISTRO_CONECTORES`.
 
 ### Resiliência (Fallback Scrapling)
 
 Quando a API oficial de uma fonte falha (403/503/timeout) ou devolve vazio, o motor tenta
 **raspar a página pública** com o Scrapling (`USA_SCRAPLING=true`) — Câmara (ficha de
-tramitação), Senado (linha do tempo), CLDF (histórico completo renderizado). Se mesmo a
-raspagem falhar, o conector devolve o que tem, sem jamais levantar. Toda raspagem ocorre
-dentro de uma requisição on-demand do operador (AGENTS.md).
+tramitação) e Senado (linha do tempo completa renderizada por JS). Se mesmo a raspagem
+falhar, o conector devolve o que tem, sem jamais levantar. Toda raspagem ocorre dentro de
+uma requisição on-demand do operador (AGENTS.md).
 
 ### Filtro Inteligente Family Talks
 
@@ -144,7 +148,7 @@ cd backend
 | Endpoint | Método | Descrição |
 |----------|--------|-----------|
 | `/hub/fontes` | GET | Status das fontes do motor (sem rede). |
-| `/hub/busca/proposicoes` | GET | Busca por palavras-chave na fonte (`camara` e `dou` → 200; outras → 501). Sob demanda. |
+| `/hub/busca/proposicoes` | GET | Busca por palavras-chave na fonte (`camara` e `dou` → 200; fontes sem busca → 501). Sob demanda. |
 | `/hub/proposicoes/listar` | GET | Proposições salvas no repositório local. |
 | `/hub/proposicoes/{fonte}/{id}` | GET/POST | Ler salva / disparar coleta (gatilho on-demand). Inclui `autorias`. |
 | `/hub/parlamentares/listar` | GET | Parlamentares salvos. |
@@ -285,7 +289,7 @@ backend\.venv\Scripts\python -m pytest tests -q
 ```
 
 A suíte usa `tempdir` para banco/entregas e URLs de API inválidas (zero rede). Inclui
-cobertura de conectores (Câmara, Senado, CLDF), hub, autorias, TSE (cache, reescrita
+cobertura de conectores (Câmara, Senado), hub, autorias, TSE (cache, reescrita
 atômica, detalhe rico) e auditoria.
 
 ---

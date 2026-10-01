@@ -76,7 +76,7 @@ async def status_fontes() -> Dict[str, str]:
 @limiter.limit(LIMITE_PROPOSICOES)
 async def buscar_proposicoes_hub(
     request: Request,
-    fonte: str = Query(..., min_length=2, max_length=20, description="Fonte canônica: camara, senado, cldf, dou"),
+    fonte: str = Query(..., min_length=2, max_length=20, description="Fonte canônica: camara, senado, dou"),
     termo: str = Query(..., min_length=2, max_length=150, description="Palavras-chave da busca"),
     sigla_tipo: Optional[str] = Query(None, min_length=2, max_length=10, description="Sigla: PL, PEC, REQ..."),
     ano: Optional[int] = Query(None, ge=1900, le=2100, description="Janela opcional de apresentação"),
@@ -86,7 +86,7 @@ async def buscar_proposicoes_hub(
 
     Retorna resumos normalizados SEM persistir. Para coleta/persistência do
     payload completo, dispare POST /hub/proposicoes/{fonte}/{id_externo} por
-    resultado de interesse. Fontes sem busca via API (ex.: ALGO) respondem 501.
+    resultado de interesse. Fontes sem busca por item respondem 501.
     A fonte ``dou`` devolve publicações do Diário Oficial (resumos ricos, sem
     coleta por item — são a própria entrega da busca).
     """
@@ -119,7 +119,7 @@ async def buscar_proposicoes_hub(
 @limiter.limit(LIMITE_PROPOSICOES)
 async def listar_proposicoes(
     request: Request,
-    fonte: Optional[str] = Query(None, description="Fonte canônica: camara, senado, cldf"),
+    fonte: Optional[str] = Query(None, description="Fonte canônica: camara, senado, dou"),
     ano: Optional[int] = Query(None, ge=1900, le=2100),
     tipo: Optional[str] = Query(None, min_length=2, max_length=10, description="Sigla: PL, PEC, REQ..."),
     termo: Optional[str] = Query(None, min_length=2, max_length=150, description="Busca em ementa/autor/pauta"),
@@ -142,7 +142,6 @@ async def obter_proposicao_salva(fonte: str, id_externo: str) -> Dict[str, Any]:
     """Lê uma proposição + tramitações do repositório local (sem rede).
 
     404 se ainda não coletada — o operador deve disparar via POST.
-    O id pode conter barras (CLDF usa o formato "PL 2473/2026").
     """
     fonte = fonte.strip().lower()
     db = modulo_database()
@@ -179,8 +178,7 @@ async def coletar_proposicao(
 ) -> Dict[str, Any]:
     """GATILHO SOB DEMANDA: coleta a proposição na fonte e persiste no repositório.
 
-    Chama externamente (Câmara/Senado/CLDF) APENAS quando o operador dispara.
-    "algo" responde 501 (fonte indisponível na V1).
+    Chama externamente (Câmara/Senado) APENAS quando o operador dispara.
     """
     orquestrador = obter_orquestrador()
     campos_lista: Optional[List[str]] = (
@@ -207,7 +205,7 @@ async def coletar_proposicao(
 @limiter.limit(LIMITE_PROPOSICOES)
 async def listar_parlamentares(
     request: Request,
-    fonte: Optional[str] = Query(None, description="Fonte canônica: camara, senado, cldf"),
+    fonte: Optional[str] = Query(None, description="Fonte canônica: camara, senado"),
     uf: Optional[str] = Query(None, min_length=2, max_length=2, description="UF do mandato (ex.: DF)"),
     partido: Optional[str] = Query(None, min_length=2, max_length=10, description="Sigla do partido (ex.: PL)"),
     termo: Optional[str] = Query(None, min_length=2, max_length=120, description="Busca no nome civil/urna"),
@@ -266,7 +264,6 @@ async def coletar_parlamentar(
     """GATILHO SOB DEMANDA: coleta o parlamentar na fonte e persiste no repositório.
 
     Chama externamente (Câmara/Senado) APENAS quando o operador dispara.
-    "algo" responde 501 (fonte indisponível na V1).
     """
     orquestrador = obter_orquestrador()
     campos_lista: Optional[List[str]] = (
@@ -288,8 +285,8 @@ async def coletar_parlamentar(
 @limiter.limit("10/minute")
 async def exportar_ficha(
     request: Request,
-    fonte: str = Query(..., min_length=2, max_length=20, description="Fonte canônica: camara, senado, cldf"),
-    id_externo: str = Query(..., min_length=1, description="ID da proposição (Camara/Senado numérico; CLDF 'PL 2473/2026')"),
+    fonte: str = Query(..., min_length=2, max_length=20, description="Fonte canônica: camara, senado"),
+    id_externo: str = Query(..., min_length=1, description="ID da proposição na fonte (numérico em Câmara/Senado)"),
     baixar: bool = Query(False, description="True = devolve o .docx como download"),
 ) -> Any:
     """Gera a Ficha Legislativa (.docx) de uma proposição JÁ coletada.
@@ -386,8 +383,8 @@ async def exportar_ficha_parlamentar(
 @limiter.limit("10/minute")
 async def exportar_planilha_coleta(
     request: Request,
-    fonte: Optional[str] = Query(None, min_length=2, max_length=20, description="Fonte canônica: camara, senado, cldf"),
-    uf: Optional[str] = Query(None, min_length=2, max_length=2, description="UF do mandato (ex.: DF)"),
+    fonte: Optional[str] = Query(None, min_length=2, max_length=20, description="Fonte canônica: camara, senado"),
+    uf: Optional[str] = Query(None, min_length=2, max_length=2, description="UF do mandato (ex.: RJ)"),
     partido: Optional[str] = Query(None, min_length=2, max_length=10, description="Sigla do partido (ex.: PL)"),
     termo: Optional[str] = Query(None, min_length=2, max_length=120, description="Filtra pelo nome civil/urna"),
     limite: int = Query(500, ge=1, le=1000, description="Quantidade máxima de linhas"),

@@ -4,8 +4,11 @@
 
 **RelMEg** (Relatórios de Monitoramento e Engajamento) é um back-end em Python
 que coleta dados legislativos de APIs públicas governamentais (Câmara dos
-Deputados, Senado Federal, CLDF, DOU, TSE) e gera artefatos de entrega
+Deputados, Senado Federal, DOU, TSE) e gera artefatos de entrega
 prontos para clientes de inteligência política/advocacy.
+
+O escopo é a **esfera federal**: as assembléias estaduais (CLDF, ALGO, ALMG,
+ALESP) foram removidas da plataforma em 01/10/2026.
 
 Todo disparo é **sob demanda** (nenhum cron, polling ou varredura em segundo
 plano — ver AGENTS.md).
@@ -49,8 +52,8 @@ processa e entrega.
 │  └──────────────┘            ▼                                      │
 │                    ┌─────────────────────┐                          │
 │                    │  relmeg_core/       │  Conectores por fonte:   │
-│                    │  ├─ connectors/     │  camara, senado, cldf,   │
-│                    │  ├─ models/         │  dou, algo, almg, alesp  │
+│                    │  ├─ connectors/     │  camara, senado, dou     │
+│                    │  ├─ models/         │  (escopo federal)        │
 │                    │  └─ orquestrador.py │  → roteia fonte→conector │
 │                    └─────────────────────┘                          │
 │                              │                                      │
@@ -373,7 +376,7 @@ Os testes usam `tempfile` para banco/entregas e `TSE_BASE_URL=http://tse.invalid
 | 429 | Rate limit excedido | Aguarde 1 minuto ou reduza a frequência |
 | 502 | Fonte externa indisponível | Tente novamente em instantes |
 | 503 | Portal DOU instável | Tente novamente ou use outro período |
-| 501 | Fonte sem API pública (ex: ALGO) | Consulte `/hub/fontes` para ver disponibilidade |
+| 501 | Fonte sem coleta por item (ex.: DOU, Senado) | Consulte `/hub/fontes` para ver disponibilidade |
 | 400 | Parâmetros inválidos (UF, cargo, ano) | Confira a tabela de códigos TSE em `/tse/candidatos` |
 
 **Verificar status das fontes:**
